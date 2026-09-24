@@ -103,9 +103,11 @@ export async function mount(ctx) {
     panel.innerHTML = `
       <div class="flex items-center gap-3 mb-3">
         ${avatar({ src: member.photo, name: member.fullName, size: 'md' })}
-        <div><p class="font-heading font-semibold text-slate-800 dark:text-slate-100">${escapeHtml(member.fullName)}</p>
-        <p class="text-xs text-slate-400">${escapeHtml(member.admissionNo)} · ${escapeHtml([member.classLevel, member.stream].filter(Boolean).join(' '))}</p></div>
-        <span class="ml-auto text-sm text-slate-500">${escapeHtml(t('return.openLoans', { n: loans.length }))}</span>
+        <div class="min-w-0">
+          <a href="#/members/${escapeHtml(member._id)}" class="font-heading font-semibold text-slate-800 dark:text-slate-100 hover:text-primary inline-flex items-center gap-1.5">${escapeHtml(member.fullName)}<i data-lucide="external-link" class="w-4 h-4 text-slate-400"></i></a>
+          <p class="text-xs text-slate-400">${escapeHtml(member.admissionNo)} · ${escapeHtml([member.classLevel, member.stream].filter(Boolean).join(' '))}</p>
+        </div>
+        <span class="ml-auto text-sm text-slate-500 flex-shrink-0">${escapeHtml(t('return.openLoans', { n: loans.length }))}</span>
       </div>
       <div class="space-y-4">
         ${loans.map((loan) => loanCard(loan)).join('')}

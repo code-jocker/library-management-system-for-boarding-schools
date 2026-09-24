@@ -220,6 +220,7 @@ export default {
     printCard: 'Capa ikarita ya bibliyoteki',
     importMembers: 'Kwinjiza abanyamuryango',
     currentLoans: 'Ibitabo afite ubu',
+    totalBorrowed: 'Ibitabo byose yafashe',
     borrowingHistory: 'Amateka yo kubikuza',
     fines: 'Amande',
     noLoans: 'Nta bitabo afite ubu',
@@ -433,7 +434,12 @@ export default {
     confirmImport: 'Emeza kwinjiza',
     summary: 'Byongewe {created} · Byasimbwe {skipped} · Byanze {failed}',
     noValidRows: 'Nta mirongo myiza yo kwinjiza.',
-    lineErrors: 'Umurongo {line}: {msg}'
+    lineErrors: 'Umurongo {line}: {msg}',
+    editHint: 'Ushobora guhindura akazu ako ari ko kose, wuzuze ibibura, wongere cyangwa ukureho imirongo mbere yo kwinjiza.',
+    addRow: 'Ongera umurongo',
+    recheck: 'Ongera ugenzure',
+    removeRow: 'Kuraho umurongo',
+    addedMissing: 'Ibibura byongewe kugira ngo uhindure: {fields}'
   },
   notFound: {
     title: 'Paje ntibonetse',

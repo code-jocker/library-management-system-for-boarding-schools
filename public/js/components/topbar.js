@@ -17,7 +17,7 @@ export function topbarHtml() {
   const u = getStoredUser() || {};
   const s = getState();
   return `
-    <div class="flex items-center gap-3 h-16 px-4">
+    <div class="flex items-center gap-2 sm:gap-3 h-16 px-3 sm:px-4">
       <button id="menu-toggle" class="lg:hidden p-2 rounded-input text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 min-w-[44px] min-h-[44px]" aria-label="Menu">
         <i data-lucide="menu" class="w-6 h-6"></i>
       </button>
@@ -25,7 +25,7 @@ export function topbarHtml() {
       <h1 id="page-title" class="font-heading font-semibold text-lg text-slate-800 dark:text-slate-100 truncate hidden sm:block"></h1>
 
       <!-- Global quick search -->
-      <div class="flex-1 max-w-md relative ml-auto sm:ml-4">
+      <div class="flex-1 min-w-0 max-w-md relative ml-auto sm:ml-4">
         <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
         <input id="global-search" type="search" autocomplete="off"
           placeholder="${escapeHtml(t('common.searchPlaceholder'))}"
@@ -34,7 +34,7 @@ export function topbarHtml() {
         <div id="global-search-results" class="hidden absolute left-0 right-0 mt-2 bg-white dark:bg-slate-800 rounded-card shadow-card border border-slate-200 dark:border-slate-700 overflow-hidden max-h-[70vh] overflow-y-auto z-50"></div>
       </div>
 
-      <div class="flex items-center gap-1">
+      <div class="flex items-center gap-1 flex-shrink-0">
         <!-- Offline sync: pending-drafts badge + manual "Sync now" -->
         <button id="sync-toggle" type="button" class="relative p-2 rounded-input text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 min-w-[44px] min-h-[44px] flex items-center justify-center" title="${escapeHtml(t('offline.syncNow'))}" aria-label="${escapeHtml(t('offline.syncNow'))}">
           <i data-lucide="refresh-cw" id="sync-icon" class="w-5 h-5"></i>

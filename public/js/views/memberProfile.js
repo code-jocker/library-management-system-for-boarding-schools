@@ -58,6 +58,18 @@ export async function mount(ctx) {
       [t('members.guardianPhone'), member.guardianPhone || '—']
     ];
 
+    // Activity summary computed from the member's full transaction history.
+    const now = new Date();
+    const totalBorrowed = history.length;
+    const currentlyOut = loans.length;
+    const overdueNow = loans.filter((l) => new Date(l.dueDate) < now && l.status !== 'returned').length;
+    const summaryTiles = [
+      { label: t('members.totalBorrowed'), value: totalBorrowed, tone: 'text-slate-800 dark:text-slate-100', icon: 'library' },
+      { label: t('members.currentLoans'), value: currentlyOut, tone: 'text-primary', icon: 'book-open' },
+      { label: t('dashboard.overdue'), value: overdueNow, tone: overdueNow ? 'text-danger' : 'text-success', icon: 'alert-circle' },
+      { label: t('dashboard.unpaidFines'), value: formatMoney(unpaidAmount), tone: unpaidAmount > 0 ? 'text-danger' : 'text-success', icon: 'coins' }
+    ];
+
     container.innerHTML = `
       <div class="grid lg:grid-cols-3 gap-6 mb-6">
         ${card(`<div class="flex flex-col items-center text-center">
@@ -73,6 +85,19 @@ export async function mount(ctx) {
               <dt class="text-slate-500 dark:text-slate-400">${escapeHtml(k)}</dt>
               <dd class="text-slate-800 dark:text-slate-100 font-medium text-right">${escapeHtml(String(v))}</dd></div>`).join('')}
           </dl>`, { className: 'lg:col-span-2' })}
+      </div>
+
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+        ${summaryTiles.map((s) => `
+          <div class="rounded-card border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 flex items-center gap-3">
+            <span class="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="${s.icon}" class="w-4 h-4 text-slate-500 dark:text-slate-300"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="text-2xl font-heading font-semibold ${s.tone} truncate">${escapeHtml(String(s.value))}</p>
+              <p class="text-xs text-slate-500 dark:text-slate-400 truncate">${escapeHtml(s.label)}</p>
+            </div>
+          </div>`).join('')}
       </div>
 
       <div id="tabs" class="mb-4"></div>

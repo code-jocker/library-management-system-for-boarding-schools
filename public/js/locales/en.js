@@ -219,6 +219,7 @@ export default {
     printCard: 'Print library card',
     importMembers: 'Import members',
     currentLoans: 'Current loans',
+    totalBorrowed: 'Total borrowed',
     borrowingHistory: 'Borrowing history',
     fines: 'Fines',
     noLoans: 'No current loans',
@@ -432,7 +433,12 @@ export default {
     confirmImport: 'Confirm import',
     summary: 'Created {created} · Skipped {skipped} · Failed {failed}',
     noValidRows: 'No valid rows to import.',
-    lineErrors: 'Line {line}: {msg}'
+    lineErrors: 'Line {line}: {msg}',
+    editHint: 'You can edit any cell, fill in missing fields, add or remove rows before importing.',
+    addRow: 'Add row',
+    recheck: 'Re-check',
+    removeRow: 'Remove row',
+    addedMissing: 'Missing fields added for editing: {fields}'
   },
   notFound: {
     title: 'Page not found',

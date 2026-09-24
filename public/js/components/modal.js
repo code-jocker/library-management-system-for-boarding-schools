@@ -37,7 +37,7 @@ export function openModal(opts = {}) {
         ${dismissible ? '<button class="modal-close text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" aria-label="Close"><i data-lucide="x" class="w-5 h-5"></i></button>' : ''}
       </div>
       <div class="px-5 py-4 overflow-y-auto flex-1 modal-body">${body}</div>
-      ${actions.length ? `<div class="flex justify-end gap-2 px-5 py-4 border-t border-slate-200 dark:border-slate-700 modal-actions"></div>` : ''}
+      ${actions.length ? `<div class="flex flex-wrap justify-end gap-2 px-5 py-4 border-t border-slate-200 dark:border-slate-700 modal-actions"></div>` : ''}
     </div>`;
 
   document.getElementById('modal-root').appendChild(overlay);
@@ -77,7 +77,7 @@ export function openModal(opts = {}) {
 }
 
 function btnClass(variant) {
-  const base = 'px-4 py-2 rounded-input font-medium text-sm transition-colors min-h-[44px]';
+  const base = 'px-4 py-2 rounded-input font-medium text-sm transition-colors min-h-[44px] w-full sm:w-auto';
   if (variant === 'primary') return `${base} bg-primary text-white hover:bg-primary-700`;
   if (variant === 'danger') return `${base} bg-danger text-white hover:bg-red-700`;
   if (variant === 'success') return `${base} bg-success text-white hover:bg-green-700`;

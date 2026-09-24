@@ -215,6 +215,7 @@ export async function mount(ctx) {
           <p class="text-xs mt-1 ${over ? 'text-danger font-medium' : 'text-slate-500'}">${escapeHtml(t('issue.booksOut', { n: memberData.activeLoanCount, limit: memberData.borrowingLimit }))}${over ? ` · ${over} ${escapeHtml(t('dashboard.overdue').toLowerCase())}` : ''}</p>
           ${memberData.unpaidFines > 0 ? `<p class="text-xs text-danger font-medium">${escapeHtml(formatMoney(memberData.unpaidFines))} ${escapeHtml(t('dashboard.unpaidFines').toLowerCase())}</p>` : ''}
         </div>
+        <a href="#/members/${escapeHtml(m._id)}" class="text-slate-400 hover:text-primary" title="${escapeHtml(t('nav.memberProfile'))}" aria-label="${escapeHtml(t('nav.memberProfile'))}"><i data-lucide="external-link" class="w-5 h-5"></i></a>
         <button id="clear-student" class="text-slate-400 hover:text-danger" title="${escapeHtml(t('common.clearFilters'))}"><i data-lucide="x" class="w-5 h-5"></i></button>
       </div>`;
     if (window.lucide) window.lucide.createIcons();
@@ -316,8 +317,19 @@ export async function mount(ctx) {
   }
 
   // Pre-fill from query when arriving from another screen:
-  //   ?book=<title term>      -> run a title search
+  //   ?book=<title term|id>    -> search by title, or load a specific book by id
   //   ?member=<admissionNo|id> -> load that student into the right panel
+  async function loadBookParam(val) {
+    if (/^[a-f\d]{24}$/i.test(val)) {
+      try {
+        const res = await api.get('/books/' + val, { signal: ctx.signal });
+        if (res.data && res.data.book) { selectBook(res.data.book); return; }
+      } catch { /* fall through to a title search */ }
+    }
+    bookSearch.value = val;
+    searchBooks(val);
+  }
+
   async function loadMemberParam(val) {
     try {
       let adm = val;
@@ -339,7 +351,7 @@ export async function mount(ctx) {
     } catch { /* the librarian can search manually */ }
   }
 
-  if (ctx.query.book) { bookSearch.value = ctx.query.book; searchBooks(ctx.query.book); }
+  if (ctx.query.book) loadBookParam(ctx.query.book);
   if (ctx.query.member) loadMemberParam(ctx.query.member);
   bookSearch.focus();
 
