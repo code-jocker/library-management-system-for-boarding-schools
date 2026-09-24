@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#1E3A8A" />
+  <meta name="description" content="Library Management System for the boarding school library desk." />
+  <title>Library Management System</title>
+
+  <!-- Fonts: Poppins (headings) + Inter (body) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS: compiled at build time (npm run build:css) from
+       public/css/tailwind.input.css using tailwind.config.js. No Play CDN, so
+       there is no "should not be used in production" warning. -->
+
+  <!-- Icons: Lucide -->
+  <script src="https://unpkg.com/lucide@0.454.0/dist/umd/lucide.min.js"></script>
+  <!-- Charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <!-- CSV / Excel parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- PDF export -->
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+  <!-- QR code + Barcode -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+
+  <link rel="stylesheet" href="/css/tailwind.css" />
+  <link rel="stylesheet" href="/css/app.css" />
+  <link rel="icon" href="/images/favicon.svg" type="image/svg+xml" />
+
+  <!-- PWA: installable + offline-capable (service worker registered in app.js) -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/images/icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Library" />
+</head>
+<body class="font-body bg-surface text-slate-800 antialiased">
+  <!-- The whole app renders here. app.js decides auth vs app shell. -->
+  <div id="app"></div>
+
+  <!-- Toast host (aria-live for screen readers) -->
+  <div id="toast-root" aria-live="polite" aria-atomic="false" class="fixed z-[9999] top-4 right-4 flex flex-col gap-2 w-[min(92vw,360px)]"></div>
+
+  <!-- Modal host -->
+  <div id="modal-root"></div>
+
+  <!-- Hidden print host: filled by printer.js then window.print() -->
+  <div id="print-root" aria-hidden="true"></div>
+
+  <!-- Screen-reader announcements for route changes -->
+  <div id="route-announcer" class="sr-only" aria-live="polite" role="status"></div>
+
+  <!-- Offline banner -->
+  <div id="offline-banner" class="hidden fixed z-[9998] inset-x-0 top-0 bg-danger text-white text-center text-sm font-medium py-2 px-4">
+    You are offline. Changes are saved as drafts and will sync automatically when you reconnect.
+  </div>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
