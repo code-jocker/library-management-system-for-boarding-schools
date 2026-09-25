@@ -1,7 +1,6 @@
 // server.js
-// Express app: security, compression, static SPA, REST API, SPA fallback.
+// Express app: security, compression, REST API.
 require('dotenv').config();
-const path = require('path');
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
@@ -18,29 +17,14 @@ const app = express();
 // Trust the first proxy hop (Render/Railway put the app behind a proxy).
 app.set('trust proxy', 1);
 
-// ---- Security headers + CSP allowing the pinned CDNs the SPA uses ----
+// ---- Security headers for API ----
 app.use(
   helmet({
     contentSecurityPolicy: {
       useDefaults: true,
       directives: {
-        'default-src': ["'self'"],
-        'script-src': [
-          "'self'",
-          "'unsafe-inline'", // inline module bootstrap
-          'https://unpkg.com',
-          'https://cdn.jsdelivr.net'
-        ],
-        'style-src': [
-          "'self'",
-          "'unsafe-inline'",
-          'https://fonts.googleapis.com',
-          'https://cdn.jsdelivr.net'
-        ],
-        'font-src': ["'self'", 'https://fonts.gstatic.com', 'https://cdn.jsdelivr.net', 'data:'],
-        'img-src': ["'self'", 'data:', 'blob:', 'https:'],
-        'connect-src': ["'self'", 'https:', 'wss:'],
-        'worker-src': ["'self'", 'blob:'],
+        'default-src': ["'none'"],
+        'frame-ancestors': ["'none'"],
         'object-src': ["'none'"]
       }
     },
@@ -88,25 +72,8 @@ app.use('/api/clearance', require('./routes/clearanceRoutes'));
 // Health check.
 app.get('/api/health', (req, res) => res.json({ success: true, data: { status: 'ok', time: new Date().toISOString() } }));
 
-// ---- Serve the SPA statically ----
-// PWA files get explicit MIME + no-cache headers so updates propagate immediately.
-app.get('/manifest.webmanifest', (req, res) => {
-  res.type('application/manifest+json').setHeader('Cache-Control', 'no-cache')
-    .sendFile(path.join(__dirname, 'public', 'manifest.webmanifest'));
-});
-app.get('/sw.js', (req, res) => {
-  res.type('application/javascript').setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
-    .sendFile(path.join(__dirname, 'public', 'sw.js'));
-});
-app.use(express.static(path.join(__dirname, 'public')));
-
-// API 404 (JSON) before the SPA fallback.
+// API 404 (JSON).
 app.use('/api', notFound);
-
-// ---- SPA fallback: any non-API GET serves index.html ----
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
 
 // Global error handler last.
 app.use(errorHandler);
