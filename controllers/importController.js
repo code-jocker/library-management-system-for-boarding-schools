@@ -4,6 +4,7 @@
 const Book = require('../models/Book');
 const Member = require('../models/Member');
 const Category = require('../models/Category');
+const Setting = require('../models/Setting');
 const asyncHandler = require('../utils/asyncHandler');
 const { logActivity } = require('../utils/activityLogger');
 const { nextAdmissionNo } = require('../utils/admissionNo');
@@ -97,6 +98,12 @@ async function handleMembers(req, res, commit) {
 
   const existing = new Set((await Member.find({}, { admissionNo: 1 }).lean()).map((m) => m.admissionNo.toUpperCase()));
 
+  // Load settings to validate against configured class levels, streams, and dormitories.
+  const settings = await Setting.get();
+  const validClassLevels = new Set((settings.classLevels || []).map((c) => c.toLowerCase()));
+  const validStreams = new Set((settings.streams || []).map((s) => s.toLowerCase()));
+  const validDormitories = new Set((settings.dormitories || []).map((d) => d.toLowerCase()));
+
   // Normalize a gender cell to the schema enum, tolerating case + common
   // abbreviations. Anything unrecognized (or missing) falls back to 'Other'
   // so a row is never rejected just because the file lacked a clean value.
@@ -125,6 +132,20 @@ async function handleMembers(req, res, commit) {
       else if (seen.has(admissionNo)) errors.admissionNo = 'Duplicate within this file';
     }
 
+    const classLevel = (r.classLevel || r.class || '').toString().trim();
+    const stream = (r.stream || '').toString().trim();
+    const dormitory = (r.dormitory || '').toString().trim();
+
+    if (classLevel && validClassLevels.size > 0 && !validClassLevels.has(classLevel.toLowerCase())) {
+      errors.classLevel = `Not a valid class (${settings.classLevels.join(', ')})`;
+    }
+    if (stream && validStreams.size > 0 && !validStreams.has(stream.toLowerCase())) {
+      errors.stream = `Not a valid stream (${settings.streams.join(', ')})`;
+    }
+    if (dormitory && validDormitories.size > 0 && !validDormitories.has(dormitory.toLowerCase())) {
+      errors.dormitory = `Not a valid dormitory (${settings.dormitories.join(', ')})`;
+    }
+
     const hasErrors = Object.keys(errors).length > 0;
     if (!hasErrors && admissionNo) seen.add(admissionNo);
 
@@ -137,9 +158,9 @@ async function handleMembers(req, res, commit) {
           fullName, admissionNo: finalAdmissionNo,
           gender: normalizeGender(r.gender),
           memberType: (r.memberType || '').toString().toLowerCase() === 'teacher' ? 'teacher' : 'student',
-          classLevel: (r.classLevel || r.class || '').toString().trim(),
-          stream: (r.stream || '').toString().trim(),
-          dormitory: (r.dormitory || '').toString().trim(),
+          classLevel,
+          stream,
+          dormitory,
           phone: (r.phone || '').toString().trim(),
           guardianName: (r.guardianName || '').toString().trim(),
           guardianPhone: (r.guardianPhone || '').toString().trim(),
