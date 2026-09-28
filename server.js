@@ -74,30 +74,28 @@ app.use('/api/clearance', require('./routes/clearanceRoutes'));
 // Health check.
 app.get('/api/health', (req, res) => res.json({ success: true, data: { status: 'ok', time: new Date().toISOString() } }));
 
-// Seed endpoint (GET and POST) - creates librarian if no users exist.
+// Seed endpoint (GET and POST) - always (re)creates/resets the librarian account.
 app.all('/api/_seed', async (req, res) => {
   try {
     console.log('[seed] Seed endpoint called');
-    const userCount = await User.countDocuments();
-    console.log('[seed] Current user count:', userCount);
-    if (userCount > 0) {
-      return res.json({ success: true, message: `Database already has ${userCount} user(s)` });
-    }
     await Setting.get();
     const defaultPassword = process.env.DEFAULT_LIBRARIAN_PASSWORD || 'Librarian@2024';
-    console.log('[seed] Creating librarian with password:', defaultPassword);
+    console.log('[seed] Setting password for librarian to:', defaultPassword);
     const passwordHash = await User.hashPassword(defaultPassword);
-    await User.create({
+    const filter = { username: 'umutoni.jeannette' };
+    const update = {
       username: 'umutoni.jeannette',
       fullName: 'Umutoni Jeannette',
       role: 'librarian',
       email: 'umutoni.jeannette@greenhills.rw',
       phone: '+250 788 000 000',
       passwordHash,
-      mustChangePassword: true
-    });
-    console.log('[seed] Librarian created successfully');
-    res.json({ success: true, data: { username: 'umutoni.jeannette', password: defaultPassword } });
+      mustChangePassword: false
+    };
+    const options = { upsert: true, new: true, runValidators: true };
+    const user = await User.findOneAndUpdate(filter, update, options);
+    console.log('[seed] Librarian upserted:', user ? user.username : 'FAILED');
+    res.json({ success: true, data: { username: 'umutoni.jeannette', password: defaultPassword, id: user._id } });
   } catch (e) {
     console.error('[seed] Error:', e);
     res.status(500).json({ success: false, message: e.message });
@@ -117,23 +115,22 @@ async function autoSeed() {
   try {
     console.log('[server] Auto-seed: checking database...');
     await Setting.get();
-    const userCount = await User.countDocuments();
-    console.log(`[server] Auto-seed: found ${userCount} user(s)`);
-    if (userCount === 0) {
-      const defaultPassword = process.env.DEFAULT_LIBRARIAN_PASSWORD || 'Librarian@2024';
-      console.log('[server] Auto-seed: creating librarian account...');
-      const passwordHash = await User.hashPassword(defaultPassword);
-      await User.create({
-        username: 'umutoni.jeannette',
-        fullName: 'Umutoni Jeannette',
-        role: 'librarian',
-        email: 'umutoni.jeannette@greenhills.rw',
-        phone: '+250 788 000 000',
-        passwordHash,
-        mustChangePassword: true
-      });
-      console.log('[server] Auto-seeded librarian: umutoni.jeannette / ' + defaultPassword);
-    }
+    const existing = await User.findOne({ username: 'umutoni.jeannette' }).lean();
+    const defaultPassword = process.env.DEFAULT_LIBRARIAN_PASSWORD || 'Librarian@2024';
+    console.log('[server] Auto-seed: existing librarian found:', !!existing);
+    const passwordHash = await User.hashPassword(defaultPassword);
+    const filter = { username: 'umutoni.jeannette' };
+    const update = {
+      username: 'umutoni.jeannette',
+      fullName: 'Umutoni Jeannette',
+      role: 'librarian',
+      email: 'umutoni.jeannette@greenhills.rw',
+      phone: '+250 788 000 000',
+      passwordHash,
+      mustChangePassword: false
+    };
+    await User.findOneAndUpdate(filter, update, { upsert: true, runValidators: true });
+    console.log('[server] Auto-seed complete: umutoni.jeannette / ' + defaultPassword);
   } catch (e) {
     console.error('[server] Auto-seed failed:', e);
   }
