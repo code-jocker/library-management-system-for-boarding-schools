@@ -74,13 +74,14 @@ app.use('/api/clearance', require('./routes/clearanceRoutes'));
 // Health check.
 app.get('/api/health', (req, res) => res.json({ success: true, data: { status: 'ok', time: new Date().toISOString() } }));
 
-// Seed endpoint (GET and POST) - always (re)creates/resets the librarian account.
+// Seed endpoint (GET and POST) - removes all non-librarian users and upserts the single librarian.
 app.all('/api/_seed', async (req, res) => {
   try {
     console.log('[seed] Seed endpoint called');
     await Setting.get();
+    await User.deleteMany({ username: { $ne: 'umutoni.jeannette' } });
+    console.log('[seed] Deleted non-librarian users');
     const defaultPassword = process.env.DEFAULT_LIBRARIAN_PASSWORD || 'Librarian@2024';
-    console.log('[seed] Setting password for librarian to:', defaultPassword);
     const passwordHash = await User.hashPassword(defaultPassword);
     const filter = { username: 'umutoni.jeannette' };
     const update = {
@@ -94,8 +95,8 @@ app.all('/api/_seed', async (req, res) => {
     };
     const options = { upsert: true, new: true, runValidators: true };
     const user = await User.findOneAndUpdate(filter, update, options);
-    console.log('[seed] Librarian upserted:', user ? user.username : 'FAILED');
-    res.json({ success: true, data: { username: 'umutoni.jeannette', password: defaultPassword, id: user._id } });
+    const count = await User.countDocuments();
+    res.json({ success: true, data: { username: 'umutoni.jeannette', password: defaultPassword, id: user._id, userCount: count } });
   } catch (e) {
     console.error('[seed] Error:', e);
     res.status(500).json({ success: false, message: e.message });
