@@ -7,7 +7,10 @@
 import { getToken, clearSession, onUnauthorized } from './auth.js';
 import { mirrorResponse, queueDraft, isOffline, readFromMirror } from './offline.js';
 
-const BASE = '/api';
+// API base URL - can be overridden at runtime via window.LMS_API_BASE
+// Defaults to '/api' for same-origin (when served by Express)
+// For Firebase hosting, set to your Render backend URL (e.g., 'https://your-api.onrender.com/api')
+const BASE = (typeof window !== 'undefined' && window.LMS_API_BASE) || '/api';
 const DEFAULT_TIMEOUT = 20000;
 
 // In-memory cache for rarely-changing data (settings, categories, lists).
