@@ -74,6 +74,36 @@ app.use('/api/clearance', require('./routes/clearanceRoutes'));
 // Health check.
 app.get('/api/health', (req, res) => res.json({ success: true, data: { status: 'ok', time: new Date().toISOString() } }));
 
+// Seed endpoint (GET and POST) - creates librarian if no users exist.
+app.all('/api/_seed', async (req, res) => {
+  try {
+    console.log('[seed] Seed endpoint called');
+    const userCount = await User.countDocuments();
+    console.log('[seed] Current user count:', userCount);
+    if (userCount > 0) {
+      return res.json({ success: true, message: `Database already has ${userCount} user(s)` });
+    }
+    await Setting.get();
+    const defaultPassword = process.env.DEFAULT_LIBRARIAN_PASSWORD || 'Librarian@2024';
+    console.log('[seed] Creating librarian with password:', defaultPassword);
+    const passwordHash = await User.hashPassword(defaultPassword);
+    await User.create({
+      username: 'umutoni.jeannette',
+      fullName: 'Umutoni Jeannette',
+      role: 'librarian',
+      email: 'umutoni.jeannette@greenhills.rw',
+      phone: '+250 788 000 000',
+      passwordHash,
+      mustChangePassword: true
+    });
+    console.log('[seed] Librarian created successfully');
+    res.json({ success: true, data: { username: 'umutoni.jeannette', password: defaultPassword } });
+  } catch (e) {
+    console.error('[seed] Error:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
 // API 404 (JSON).
 app.use('/api', notFound);
 
@@ -85,10 +115,13 @@ const PORT = process.env.PORT || 5000;
 // Auto-seed the librarian account if no users exist in the database.
 async function autoSeed() {
   try {
+    console.log('[server] Auto-seed: checking database...');
     await Setting.get();
     const userCount = await User.countDocuments();
+    console.log(`[server] Auto-seed: found ${userCount} user(s)`);
     if (userCount === 0) {
       const defaultPassword = process.env.DEFAULT_LIBRARIAN_PASSWORD || 'Librarian@2024';
+      console.log('[server] Auto-seed: creating librarian account...');
       const passwordHash = await User.hashPassword(defaultPassword);
       await User.create({
         username: 'umutoni.jeannette',
@@ -102,7 +135,7 @@ async function autoSeed() {
       console.log('[server] Auto-seeded librarian: umutoni.jeannette / ' + defaultPassword);
     }
   } catch (e) {
-    console.error('[server] Auto-seed failed:', e.message);
+    console.error('[server] Auto-seed failed:', e);
   }
 }
 
