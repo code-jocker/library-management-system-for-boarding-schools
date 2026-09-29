@@ -21,7 +21,7 @@ const stats = asyncHandler(async (req, res) => {
     Book.aggregate([{ $group: { _id: null, sum: { $sum: '$availableCopies' } } }]),
     Transaction.countDocuments({ status: { $in: ['borrowed', 'overdue'] } }),
     Transaction.find({ status: { $in: ['borrowed', 'overdue'] }, dueDate: { $lt: now } })
-      .populate('book', 'title isbn cover').populate('member', 'fullName admissionNo classLevel photo')
+      .populate('book', 'title isbn').populate('member', 'fullName admissionNo classLevel')
       .sort({ dueDate: 1 }).lean(),
     Member.countDocuments({ status: 'active' }),
     Fine.aggregate([
@@ -42,7 +42,7 @@ const stats = asyncHandler(async (req, res) => {
   const dueTodayTxns = await Transaction.find({
     status: { $in: ['borrowed', 'overdue'] },
     dueDate: { $gte: startOfDay, $lte: endOfDay }
-  }).populate('book', 'title isbn cover').populate('member', 'fullName admissionNo classLevel photo').lean();
+  }).populate('book', 'title isbn').populate('member', 'fullName admissionNo classLevel').lean();
 
   // Monthly borrow counts for the last 6 months.
   const monthlyAgg = await Transaction.aggregate([
