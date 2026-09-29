@@ -1,6 +1,7 @@
 // server.js
 // Express app: security, compression, REST API.
 require('dotenv').config();
+const fs = require('fs');
 const express = require('express');
 const http = require('http');
 const helmet = require('helmet');
@@ -14,7 +15,6 @@ const notFound = require('./middleware/notFound');
 const errorHandler = require('./middleware/errorHandler');
 const { apiLimiter } = require('./middleware/rateLimiter');
 const User = require('./models/User');
-const Setting = require('./models/Setting');
 const push = require('./utils/pushNotifications');
 const scheduler = require('./utils/scheduler');
 const eventBus = require('./utils/eventBus');
@@ -81,34 +81,11 @@ app.use('/api/assistant', require('./routes/assistantRoutes'));
 // Health check.
 app.get('/api/health', (req, res) => res.json({ success: true, data: { status: 'ok', time: new Date().toISOString() } }));
 
-// Seed endpoint (GET and POST) - removes all non-librarian users and upserts the single librarian.
-app.all('/api/_seed', async (req, res) => {
-  try {
-    console.log('[seed] Seed endpoint called');
-    await Setting.get();
-    await User.deleteMany({ username: { $ne: 'umutoni.jeannette' } });
-    console.log('[seed] Deleted non-librarian users');
-    const defaultPassword = process.env.DEFAULT_LIBRARIAN_PASSWORD || 'Librarian@2024';
-    const passwordHash = await User.hashPassword(defaultPassword);
-    const filter = { username: 'umutoni.jeannette' };
-    const update = {
-      username: 'umutoni.jeannette',
-      fullName: 'Umutoni Jeannette',
-      role: 'librarian',
-      email: 'umutoni.jeannette@greenhills.rw',
-      phone: '+250 788 000 000',
-      passwordHash,
-      mustChangePassword: false
-    };
-    const options = { upsert: true, new: true, runValidators: true };
-    const user = await User.findOneAndUpdate(filter, update, options);
-    const count = await User.countDocuments();
-    res.json({ success: true, data: { username: 'umutoni.jeannette', password: defaultPassword, id: user._id, userCount: count } });
-  } catch (e) {
-    console.error('[seed] Error:', e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
+// NOTE: there used to be an unauthenticated `app.all('/api/_seed')` endpoint
+// here. It deleted every non-librarian user and returned the librarian password
+// in plaintext, and being reachable by a plain GET meant a link or a crawler
+// could trigger it. Accounts are now created with `npm run seed:librarian`,
+// which is a local script rather than an HTTP route.
 
 // API 404 (JSON).
 app.use('/api', notFound);
@@ -118,29 +95,42 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-// Auto-seed the librarian account.
-async function autoSeed() {
+// The librarian account is NOT auto-created here.
+//
+// This function used to run on every boot and upsert the account with a
+// freshly hashed DEFAULT_LIBRARIAN_PASSWORD. Because `passwordHash` was part of
+// the update payload, every deploy, spin-down or crash recovery silently reset
+// the librarian's password back to the default, discarding any password she had
+// set in the admin panel.
+//
+// Accounts are now created once, explicitly, with `npm run seed:librarian`,
+// which skips the account if it already exists. To promote a real initial
+// password, set DEFAULT_LIBRARIAN_PASSWORD before the first run and delete the
+// variable afterwards; the account forces a change on first login regardless.
+async function assertNoSeedEndpointLeak() {
+  // Cheap guard so a future edit cannot silently reintroduce a public route that
+  // writes users. Runs only at boot and costs one regex over the source.
   try {
-    console.log('[server] Auto-seed: checking database...');
-    await Setting.get();
-    const existing = await User.findOne({ username: 'umutoni.jeannette' }).lean();
-    const defaultPassword = process.env.DEFAULT_LIBRARIAN_PASSWORD || 'Librarian@2024';
-    console.log('[server] Auto-seed: existing librarian found:', !!existing);
-    const passwordHash = await User.hashPassword(defaultPassword);
-    const filter = { username: 'umutoni.jeannette' };
-    const update = {
-      username: 'umutoni.jeannette',
-      fullName: 'Umutoni Jeannette',
-      role: 'librarian',
-      email: 'umutoni.jeannette@greenhills.rw',
-      phone: '+250 788 000 000',
-      passwordHash,
-      mustChangePassword: false
-    };
-    await User.findOneAndUpdate(filter, update, { upsert: true, runValidators: true });
-    console.log('[server] Auto-seed complete: umutoni.jeannette / ' + defaultPassword);
+    const src = fs.readFileSync(__filename, 'utf8');
+    if (/app\.(all|get|post|put|patch|delete)\s*\(\s*['"`][^'"`]*seed/i.test(src)) {
+      console.warn('[server] A route matching /seed is registered. Seeding must use scripts/, not HTTP.');
+    }
+  } catch { /* best effort only */ }
+}
+
+// Seeding is no longer automatic, so an empty user collection means nobody can
+// log in. Warn loudly rather than letting it be discovered on a support call.
+async function warnIfNoUsers() {
+  try {
+    const count = await User.countDocuments();
+    if (count === 0) {
+      console.warn(
+        '\n  *** No user accounts exist in this database. ***\n' +
+        '  *** Run: npm run seed:librarian  to create the first librarian. ***\n'
+      );
+    }
   } catch (e) {
-    console.error('[server] Auto-seed failed:', e);
+    console.error('[server] Could not count users:', e.message);
   }
 }
 
@@ -188,7 +178,8 @@ function start() {
 
 async function boot() {
   await connectDB();
-  await autoSeed();
+  assertNoSeedEndpointLeak();
+  await warnIfNoUsers();
   start();
 }
 
