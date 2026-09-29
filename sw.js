@@ -6,7 +6,7 @@
 //  - Network-first for /api GETs, falling back to the last cached response.
 // Writes (POST/PUT/DELETE) are handled by the app's IndexedDB outbox, not here.
 
-const VERSION = 'v1.2.0';
+const VERSION = 'v1.3.0';
 const SHELL_CACHE = `lms-shell-${VERSION}`;
 const RUNTIME_CACHE = `lms-runtime-${VERSION}`;
 
@@ -29,6 +29,7 @@ const PRECACHE_URLS = [
   '/js/core/utils.js',
   '/js/core/db.js',
   '/js/core/offline.js',
+  '/js/core/socket.js',
   '/js/locales/en.js',
   '/js/locales/rw.js',
   '/js/components/avatar.js',
@@ -124,7 +125,6 @@ function staleWhileRevalidate(request, cacheName) {
     const cached = await cache.match(request);
     const network = fetch(request)
       .then((response) => {
-        // Only cache successful, basic (same-origin or CORS) responses.
         if (response && response.status === 200 && (response.type === 'basic' || response.type === 'cors')) {
           cache.put(request, response.clone());
         }
@@ -134,6 +134,37 @@ function staleWhileRevalidate(request, cacheName) {
     return cached || network;
   });
 }
+
+// ---- Push notifications ----
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = JSON.parse(event.data?.text() || '{}'); } catch { /* ignore bad payload */ }
+  if (!data.title) return;
+
+  const options = {
+    body: data.body || '',
+    icon: '/images/icon.png',
+    badge: '/images/favicon.svg',
+    tag: data.tag || 'lms-notification',
+    data: { url: data.url || '/' }
+  };
+
+  event.waitUntil(self.registration.showNotification(data.title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || '/';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then((clientList) => {
+        for (const client of clientList) {
+          if (client.url === url && 'focus' in client) return client.focus();
+        }
+        if (clients.openWindow) return clients.openWindow(url);
+      })
+  );
+});
 
 // Try the network first, fall back to cache when offline.
 function networkFirst(request, cacheName) {

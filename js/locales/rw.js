@@ -84,7 +84,9 @@ export default {
     lightMode: 'Ubwoko bw\'umweru',
     select: 'Hitamo',
     selectAll: 'Hitamo byose',
-    clearSelection: 'Kuraho ihitamo'
+    clearSelection: 'Kuraho ihitamo',
+    menu: 'Menu',
+    openMenu: 'Fungura menyu yo kujyayo'
   },
 
   offline: {

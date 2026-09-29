@@ -21,7 +21,7 @@ export function statCard({ label, value, icon = 'circle', tone = 'primary', sub 
       </div>
       <div class="min-w-0">
         <p class="text-sm text-slate-500 dark:text-slate-400 truncate">${escapeHtml(label)}</p>
-        <p class="text-2xl font-heading font-semibold text-slate-800 dark:text-slate-100">${escapeHtml(String(value))}</p>
+        <p class="stat-card-value text-2xl font-heading font-semibold text-slate-800 dark:text-slate-100">${escapeHtml(String(value))}</p>
         ${sub ? `<p class="text-xs text-slate-400 mt-0.5">${escapeHtml(sub)}</p>` : ''}
       </div>
     </div>`;

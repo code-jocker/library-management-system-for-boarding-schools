@@ -83,7 +83,9 @@ export default {
     lightMode: 'Light mode',
     select: 'Select',
     selectAll: 'Select all',
-    clearSelection: 'Clear selection'
+    clearSelection: 'Clear selection',
+    menu: 'Menu',
+    openMenu: 'Open navigation menu'
   },
 
   offline: {

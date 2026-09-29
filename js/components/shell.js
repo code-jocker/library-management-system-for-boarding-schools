@@ -36,11 +36,11 @@ export function renderShell(layout) {
       <!-- Mobile overlay -->
       <div id="mobile-overlay" class="hidden fixed inset-0 bg-slate-900/50 z-30 lg:hidden"></div>
 
-      <!-- Sidebar: fixed on desktop, drawer on mobile -->
+      <!-- Sidebar: fixed on desktop, drawer on mobile. The collapse width is
+           applied in css/app.css behind a min-width query rather than here, so
+           a desktop collapse never shrinks the phone drawer to an icon sliver. -->
       <aside id="sidebar"
-        class="fixed lg:sticky top-0 left-0 z-40 h-screen bg-primary transition-transform duration-200 -translate-x-full lg:translate-x-0
-        ${getState().sidebarCollapsed ? 'w-[72px]' : 'w-64'}"
-        style="width: ${getState().sidebarCollapsed ? '72px' : '256px'}">
+        class="fixed lg:sticky top-0 left-0 z-40 h-screen bg-primary transition-transform duration-200 -translate-x-full lg:translate-x-0 w-64">
         <div id="sidebar-inner"></div>
       </aside>
 
@@ -57,24 +57,67 @@ export function renderShell(layout) {
   const topbarRoot = document.getElementById('topbar');
   topbarUnsub = mountTopbar(topbarRoot);
 
-  // Sidebar width reacts to collapse state.
-  const unsubWidth = subscribe('sidebarCollapsed', (collapsed) => {
-    const sb = document.getElementById('sidebar');
-    if (sb) sb.style.width = collapsed ? '72px' : '256px';
-  });
+  const sidebarEl = document.getElementById('sidebar');
+  const overlay = document.getElementById('mobile-overlay');
+  const menuBtn = () => document.getElementById('menu-toggle');
+
+  // Desktop collapse only. Below lg the drawer is always full width, so the
+  // class is a no-op there via the media query in css/app.css.
+  const applyCollapsed = (collapsed) => {
+    if (sidebarEl) sidebarEl.classList.toggle('is-collapsed', Boolean(collapsed));
+  };
+  applyCollapsed(getState().sidebarCollapsed);
+  const unsubWidth = subscribe('sidebarCollapsed', applyCollapsed);
 
   // Mobile drawer open/close.
-  const unsubMobile = subscribe('sidebarOpenMobile', (open) => {
-    const sb = document.getElementById('sidebar');
-    const ov = document.getElementById('mobile-overlay');
-    if (!sb || !ov) return;
-    if (open) { sb.classList.remove('-translate-x-full'); ov.classList.remove('hidden'); }
-    else { sb.classList.add('-translate-x-full'); ov.classList.add('hidden'); }
-  });
-  document.getElementById('mobile-overlay').addEventListener('click', () => set({ sidebarOpenMobile: false }));
+  const applyOpen = (open) => {
+    if (!sidebarEl || !overlay) return;
+    if (open) { sidebarEl.classList.remove('-translate-x-full'); overlay.classList.remove('hidden'); }
+    else { sidebarEl.classList.add('-translate-x-full'); overlay.classList.add('hidden'); }
+    const btn = menuBtn();
+    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    // Stop the page behind the drawer from scrolling with it.
+    document.body.classList.toggle('drawer-open', Boolean(open) && window.innerWidth < 1024);
+  };
+  const unsubMobile = subscribe('sidebarOpenMobile', applyOpen);
+  // A drawer left open across a rotate or a resize to desktop width would trap
+  // the user behind it, so close it whenever the viewport stops being a phone.
+  const onViewportChange = () => {
+    if (getState().sidebarOpenMobile && window.innerWidth >= 1024) set({ sidebarOpenMobile: false });
+  };
+  window.addEventListener('resize', onViewportChange);
+  window.addEventListener('orientationchange', onViewportChange);
 
-  sidebarUnsub = () => { if (unsubWidth) unsubWidth(); };
-  mobileUnsub = () => { if (unsubMobile) unsubMobile(); };
+  overlay.addEventListener('click', () => set({ sidebarOpenMobile: false }));
+
+  // Escape closes the drawer, matching the dropdown and modal behaviour.
+  const onKeydown = (e) => {
+    if (e.key === 'Escape' && getState().sidebarOpenMobile) {
+      set({ sidebarOpenMobile: false });
+      const btn = menuBtn();
+      if (btn) btn.focus();
+    }
+  };
+  document.addEventListener('keydown', onKeydown);
+
+  // Opening the drawer moves focus into it so keyboard and screen-reader users
+  // are not left behind on the page underneath.
+  const unsubFocus = subscribe('sidebarOpenMobile', (open) => {
+    if (!open) return;
+    const first = sidebarEl && sidebarEl.querySelector('a[href], button');
+    if (first) first.focus();
+  });
+
+  sidebarUnsub = () => {
+    if (unsubWidth) unsubWidth();
+    if (unsubFocus) unsubFocus();
+  };
+  mobileUnsub = () => {
+    if (unsubMobile) unsubMobile();
+    window.removeEventListener('resize', onViewportChange);
+    window.removeEventListener('orientationchange', onViewportChange);
+    document.removeEventListener('keydown', onKeydown);
+  };
 }
 
 export function setShellTitle(title) {

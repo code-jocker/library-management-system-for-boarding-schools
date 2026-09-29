@@ -1,14 +1,145 @@
 /* public/css/app.css
-   Print styles, scrollbars, focus rings, and small custom rules.
-   Tailwind handles most styling; this file covers what utilities can't. */
+   Responsive/mobile rules, print styles, scrollbars, focus rings, and other
+   custom rules Tailwind utilities can't express.
+
+   IMPORTANT: responsive work belongs here, not in new utility classes.
+   css/tailwind.css is a purged build (Tailwind 3.4.19) and this branch has no
+   package.json or tailwind.config.js, so it cannot be regenerated. Any utility
+   class invented in a component renders as a no-op forever. Plain CSS in this
+   file is hand-written and always applies. scripts/check-frontend.js enforces
+   that boundary. */
 
 :root {
   --brand: #1E3A8A;
   --brand-2: #F59E0B;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  /* The browser's own dynamic viewport, falling back to the static one where
+     dvh is unsupported. 100vh overshoots on mobile because it ignores the
+     collapsing address bar, which pushes the last row of a page out of reach. */
+  --app-vh: 100vh;
+}
+
+@supports (height: 100dvh) {
+  :root { --app-vh: 100dvh; }
 }
 
 html, body { height: 100%; }
 body { -webkit-tap-highlight-color: transparent; }
+
+/* ---- Mobile / installed-app layout ---- */
+
+/* Keep the page still while the drawer is open, so a scroll gesture over the
+   content does not slide the page out from under the user's finger. */
+body.drawer-open { overflow: hidden; }
+
+/* The shell's min-h-screen and the drawer's h-screen both use 100vh, which on
+   a phone is taller than the visible area once browser chrome is accounted
+   for. Swap both onto the dynamic viewport. */
+#app > div,
+#sidebar {
+  min-height: var(--app-vh);
+}
+#sidebar { height: var(--app-vh); }
+
+/* Sidebar collapse is a desktop-only affordance. Gating it here rather than in
+   the inline style is what stops a desktop collapse from turning the phone
+   drawer into a 72px icon sliver with its labels hidden. */
+@media (min-width: 1024px) {
+  #sidebar.is-collapsed { width: 72px; }
+  #sidebar.is-collapsed .nav-label,
+  #sidebar.is-collapsed .brand-text { display: none; }
+}
+
+/* Clear the notch, the status bar and the home indicator. index.html sets
+   viewport-fit=cover and black-translucent, so without this the sticky topbar
+   and the fixed drawer render underneath the display cutout when the app is
+   installed. */
+#topbar { padding-top: var(--safe-top); }
+#sidebar { padding-top: var(--safe-top); padding-bottom: var(--safe-bottom); }
+#view-container { padding-bottom: calc(1.5rem + var(--safe-bottom)); }
+
+/* The offline banner is fixed to the top edge and sits above everything, so it
+   has to clear the notch too or the first line of text is unreadable. */
+#offline-banner { padding-top: var(--safe-top); }
+
+/* The toast stack and the install banner are fixed to the viewport edges. */
+#toast-root { top: calc(1rem + var(--safe-top)); }
+#install-banner {
+  bottom: calc(1rem + var(--safe-bottom)) !important;
+  left: calc(50% + (var(--safe-left) - var(--safe-right)) / 2) !important;
+}
+
+/* Below sm the topbar shows only the search, the notification bell and the
+   profile. The theme, language and sync controls move into the profile menu,
+   which is what keeps a 320px phone from overflowing. */
+#global-search::placeholder { text-overflow: ellipsis; }
+
+/* A long unbroken value (a money total, a member number) must wrap rather than
+   push a stat card past the viewport edge on a two-column phone grid. */
+.stat-card-value { overflow-wrap: anywhere; }
+
+/* Touch targets. A 16px checkbox is the right size visually, but it is well
+   under the 44px minimum a finger needs. Growing the box would distort the
+   control, so instead keep the visual size and extend the tappable area with a
+   pseudo-element. Labels stay clickable, as they already were. */
+input[type="checkbox"],
+input[type="radio"] {
+  position: relative;
+}
+input[type="checkbox"]::after,
+input[type="radio"]::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+}
+
+/* A file input cannot take a pseudo-element, so give the box itself the
+   height. The visible button inside it is unaffected. */
+input[type="file"] { min-height: 44px; }
+
+/* ---- Utilities the purged build is missing ----
+   These are referenced by components but were never in the compiled CSS,
+   because the build that produced it predates those components. They render
+   as nothing today. Defined here so the markup works and stays readable. */
+
+/* Long assistant answers and reminder message previews must wrap instead of
+   pushing a chat bubble past the edge of a narrow phone. */
+.whitespace-pre-wrap { white-space: pre-wrap; }
+.break-words { overflow-wrap: break-word; }
+.max-w-\[85\%\] { max-width: 85%; }
+.max-h-72 { max-height: 18rem; }
+.justify-start { justify-content: flex-start; }
+
+/* Lucide icon sizes referenced in markup. */
+.w-1\.5 { width: .375rem; }
+.h-1\.5 { height: .375rem; }
+.w-3\.5 { width: .875rem; }
+.h-3\.5 { height: .875rem; }
+.bg-slate-400 { background-color: rgb(148 163 184 / 1); }
+
+/* Tail chat bubbles: square off the corner nearest the sender. */
+.rounded-br-sm { border-bottom-right-radius: .25rem; }
+.rounded-bl-sm { border-bottom-left-radius: .25rem; }
+.ml-1 { margin-left: .25rem; }
+.align-\[-2px\] { vertical-align: -2px; }
+.animate-bounce { animation: bounce 1s infinite; }
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-.25rem); }
+}
+
+/* Below sm the page title is hidden to save room, so make sure the sticky
+   header still has a usable height once the notch padding is added. */
+@media (max-width: 639px) {
+  #topbar > div { height: auto; min-height: 4rem; }
+}
 
 /* Respect reduced-motion preferences everywhere. */
 @media (prefers-reduced-motion: reduce) {

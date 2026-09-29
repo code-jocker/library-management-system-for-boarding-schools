@@ -9,6 +9,7 @@ import { t, applyTranslations } from './core/i18n.js';
 import { toast } from './components/toast.js';
 import { initOfflineSync, prefetchMirror } from './core/offline.js';
 import { initInstallPrompt } from './components/installPrompt.js';
+import { connectSocket, onSocket } from './core/socket.js';
 
 // Apply saved theme immediately to avoid a flash.
 document.documentElement.classList.toggle('dark', getState().theme === 'dark');
@@ -46,7 +47,7 @@ async function bootstrap() {
       set({ overdueCount: 0 });
     }
   });
-  if (getToken()) { startInactivityTracking(); refreshOverdueCount(); }
+  if (getToken()) { startInactivityTracking(); refreshOverdueCount(); requestPushPermission(); }
 
   // Start routing.
   startRouter();
@@ -55,15 +56,51 @@ async function bootstrap() {
   wireOfflineBanner();
   // Keyboard shortcuts.
   wireShortcuts();
-  // Service worker (installable + offline).
+   // Service worker (installable + offline).
   registerServiceWorker();
   // Offline draft queue + background sync.
   initOfflineSync();
   // "Install this app" banner on a user's first visit.
   initInstallPrompt();
+  // Real-time updates + push notifications (if logged in).
+  connectSocket();
+  onSocket('dashboard:update', () => refreshOverdueCount());
+  onSocket('notifications:push', (data) => {
+    toast(data.title || 'New notification', 'info');
+    refreshOverdueCount();
+  });
 
-  // Refresh the overdue count every 2 minutes while on the app.
-  setInterval(() => { if (getToken()) refreshOverdueCount(); }, 120000);
+// Refresh the overdue count every 2 minutes while on the app.
+setInterval(() => { if (getToken()) refreshOverdueCount(); }, 120000);
+
+// Request browser push permission and save the subscription.
+async function requestPushPermission() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') return;
+
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.subscribe({
+    userVisibleProperties: ['title', 'body', 'icon'],
+    applicationServerKey: localStorage.getItem('lms_push_key') || undefined
+  });
+  if (!sub) return;
+
+  try {
+    const res = await api.get('/notifications/channels');
+    if (res?.data?.push?.available && res.data.push.vapidPublicKey) {
+      localStorage.setItem('lms_push_key', res.data.push.vapidPublicKey);
+    }
+  } catch { /* ignore */ }
+
+  await api.post('/notifications/subscribe', {
+    endpoint: sub.endpoint,
+    keys: {
+      p256dh: btoa(String.fromCharCode(...new Uint8Array(sub.getKey('p256dh')))),
+      auth: btoa(String.fromCharCode(...new Uint8Array(sub.getKey('auth'))))
+    }
+  }).catch((err) => console.warn('[app] push subscription failed:', err.message));
+}
 }
 
 function registerServiceWorker() {

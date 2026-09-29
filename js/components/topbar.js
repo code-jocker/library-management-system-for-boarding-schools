@@ -18,25 +18,29 @@ export function topbarHtml() {
   const s = getState();
   return `
     <div class="flex items-center gap-2 sm:gap-3 h-16 px-3 sm:px-4">
-      <button id="menu-toggle" class="lg:hidden p-2 rounded-input text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 min-w-[44px] min-h-[44px]" aria-label="Menu">
+      <button id="menu-toggle" class="lg:hidden p-2 rounded-input text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 min-w-[44px] min-h-[44px] flex-shrink-0" aria-label="${escapeHtml(t('common.menu'))}" aria-controls="sidebar" aria-expanded="${s.sidebarOpenMobile ? 'true' : 'false'}">
         <i data-lucide="menu" class="w-6 h-6"></i>
       </button>
 
       <h1 id="page-title" class="font-heading font-semibold text-lg text-slate-800 dark:text-slate-100 truncate hidden sm:block"></h1>
 
-      <!-- Global quick search -->
+      <!-- Quick search. On a narrow phone the trailing controls below need the
+           room more than the search box does, so it collapses to an icon-sized
+           field rather than overflowing the topbar. -->
       <div class="flex-1 min-w-0 max-w-md relative ml-auto sm:ml-4">
         <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
         <input id="global-search" type="search" autocomplete="off"
           placeholder="${escapeHtml(t('common.searchPlaceholder'))}"
           aria-label="${escapeHtml(t('common.search'))}"
-          class="w-full rounded-input border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 pl-9 pr-3 py-2.5 text-sm min-h-[44px] focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          class="w-full rounded-input border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 pl-9 pr-3 py-2.5 text-sm min-h-[44px] min-w-0 focus:border-primary focus:ring-2 focus:ring-primary/20" />
         <div id="global-search-results" class="hidden absolute left-0 right-0 mt-2 bg-white dark:bg-slate-800 rounded-card shadow-card border border-slate-200 dark:border-slate-700 overflow-hidden max-h-[70vh] overflow-y-auto z-50"></div>
       </div>
 
       <div class="flex items-center gap-1 flex-shrink-0">
-        <!-- Offline sync: pending-drafts badge + manual "Sync now" -->
-        <button id="sync-toggle" type="button" class="relative p-2 rounded-input text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 min-w-[44px] min-h-[44px] flex items-center justify-center" title="${escapeHtml(t('offline.syncNow'))}" aria-label="${escapeHtml(t('offline.syncNow'))}">
+        <!-- Offline sync: pending-drafts badge + manual "Sync now".
+             Hidden below sm, where there is no room for it; the drawer and the
+             profile menu both reach the same actions. -->
+        <button id="sync-toggle" type="button" class="relative hidden sm:flex p-2 rounded-input text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 min-w-[44px] min-h-[44px] items-center justify-center" title="${escapeHtml(t('offline.syncNow'))}" aria-label="${escapeHtml(t('offline.syncNow'))}">
           <i data-lucide="refresh-cw" id="sync-icon" class="w-5 h-5"></i>
           <span id="sync-count" class="hidden absolute -top-0.5 -right-0.5 bg-secondary text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">0</span>
         </button>
@@ -47,13 +51,14 @@ export function topbarHtml() {
           <span id="notif-count" class="hidden absolute -top-0.5 -right-0.5 bg-danger text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">0</span>
         </a>
 
-        <!-- Dark mode -->
-        <button id="theme-toggle" class="p-2 rounded-input text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 min-w-[44px] min-h-[44px]" title="${escapeHtml(t('common.darkMode'))}">
+        <!-- Dark mode: below sm the same toggle lives in the profile menu, so
+             the two controls at the right edge cannot overflow a 320px phone. -->
+        <button id="theme-toggle" class="hidden sm:block p-2 rounded-input text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 min-w-[44px] min-h-[44px]" title="${escapeHtml(t('common.darkMode'))}">
           <i data-lucide="${s.theme === 'dark' ? 'sun' : 'moon'}" class="w-5 h-5"></i>
         </button>
 
         <!-- Language -->
-        <button id="lang-toggle" class="p-2 rounded-input text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 min-w-[44px] min-h-[44px] font-medium text-sm" title="${escapeHtml(t('common.language'))}">
+        <button id="lang-toggle" class="hidden sm:block p-2 rounded-input text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 min-w-[44px] min-h-[44px] font-medium text-sm" title="${escapeHtml(t('common.language'))}">
           ${escapeHtml((s.language || 'en').toUpperCase())}
         </button>
 
@@ -82,30 +87,13 @@ export function mountTopbar(root) {
   unsubscribers.push(mountGlobalSearch(root.querySelector('#global-search'), root.querySelector('#global-search-results')));
 
   // Theme toggle.
-  const themeBtn = root.querySelector('#theme-toggle');
-  themeBtn.addEventListener('click', () => {
-    const next = getState().theme === 'dark' ? 'light' : 'dark';
-    set({ theme: next });
-    themeBtn.innerHTML = `<i data-lucide="${next === 'dark' ? 'sun' : 'moon'}" class="w-5 h-5"></i>`;
-    if (window.lucide) window.lucide.createIcons();
-  });
+  root.querySelector('#theme-toggle').addEventListener('click', () => toggleTheme(root));
 
   // Language toggle (cycles through available languages).
-  const langBtn = root.querySelector('#lang-toggle');
-  langBtn.addEventListener('click', () => {
-    const langs = getLanguages();
-    const idx = langs.findIndex((l) => l.code === getState().language);
-    const next = langs[(idx + 1) % langs.length].code;
-    setLanguage(next);
-  });
+  root.querySelector('#lang-toggle').addEventListener('click', () => cycleLanguage());
 
   // Profile menu.
-  attachDropdown(root.querySelector('#profile-toggle'), [
-    { label: t('nav.profile'), icon: 'user', onClick: () => navigate('/profile') },
-    { label: t('nav.changePassword'), icon: 'key-round', onClick: () => navigate('/change-password') },
-    { divider: true },
-    { label: t('nav.logout'), icon: 'log-out', danger: true, onClick: () => { clearSession(); navigate('/login', { replace: true }); } }
-  ]);
+  wireProfileMenu(root);
 
   // Notification bell reflects overdue count.
   const unsubOverdue = subscribe('overdueCount', (n) => updateBell(root, n));
@@ -130,26 +118,44 @@ export function mountTopbar(root) {
 function mountTopbarHandlers(root, unsubscribers) {
   root.querySelector('#menu-toggle').addEventListener('click', () => set({ sidebarOpenMobile: !getState().sidebarOpenMobile }));
   unsubscribers.push(mountGlobalSearch(root.querySelector('#global-search'), root.querySelector('#global-search-results')));
-  const themeBtn = root.querySelector('#theme-toggle');
-  themeBtn.addEventListener('click', () => {
-    const next = getState().theme === 'dark' ? 'light' : 'dark';
-    set({ theme: next });
-    themeBtn.innerHTML = `<i data-lucide="${next === 'dark' ? 'sun' : 'moon'}" class="w-5 h-5"></i>`;
+  root.querySelector('#theme-toggle').addEventListener('click', () => toggleTheme(root));
+  root.querySelector('#lang-toggle').addEventListener('click', () => cycleLanguage());
+  wireProfileMenu(root);
+  updateBell(root, getState().overdueCount);
+  wireSyncWidget(root, unsubscribers);
+}
+
+// Shared by the topbar button and its profile-menu equivalent, so the two
+// entry points cannot drift apart.
+function toggleTheme(root) {
+  const next = getState().theme === 'dark' ? 'light' : 'dark';
+  set({ theme: next });
+  const btn = root.querySelector('#theme-toggle');
+  if (btn) {
+    btn.innerHTML = `<i data-lucide="${next === 'dark' ? 'sun' : 'moon'}" class="w-5 h-5"></i>`;
     if (window.lucide) window.lucide.createIcons();
-  });
-  root.querySelector('#lang-toggle').addEventListener('click', () => {
-    const langs = getLanguages();
-    const idx = langs.findIndex((l) => l.code === getState().language);
-    setLanguage(langs[(idx + 1) % langs.length].code);
-  });
+  }
+}
+
+function cycleLanguage() {
+  const langs = getLanguages();
+  const idx = langs.findIndex((l) => l.code === getState().language);
+  setLanguage(langs[(idx + 1) % langs.length].code);
+}
+
+// Below sm the topbar has no room for the theme, language and sync controls,
+// so the profile menu carries all three.
+function wireProfileMenu(root) {
   attachDropdown(root.querySelector('#profile-toggle'), [
     { label: t('nav.profile'), icon: 'user', onClick: () => navigate('/profile') },
     { label: t('nav.changePassword'), icon: 'key-round', onClick: () => navigate('/change-password') },
     { divider: true },
+    { label: t('common.darkMode'), icon: getState().theme === 'dark' ? 'sun' : 'moon', onClick: () => toggleTheme(root) },
+    { label: t('common.language'), icon: 'languages', onClick: () => cycleLanguage() },
+    { label: t('offline.syncNow'), icon: 'refresh-cw', onClick: () => handleSyncClick(root) },
+    { divider: true },
     { label: t('nav.logout'), icon: 'log-out', danger: true, onClick: () => { clearSession(); navigate('/login', { replace: true }); } }
   ]);
-  updateBell(root, getState().overdueCount);
-  wireSyncWidget(root, unsubscribers);
 }
 
 function updateBell(root, count) {

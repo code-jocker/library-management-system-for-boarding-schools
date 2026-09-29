@@ -144,23 +144,134 @@ function checkLocales(enDict, rwDict) {
 
   // ---- 9. Tailwind classes used in JS must exist in the purged build ----
   // css/tailwind.css is purged to the classes the app actually uses, and this
-  // branch has no tailwind.config.js to rebuild it, so a class invented in a
-  // component silently renders unstyled. The install banner is built by hand
-  // rather than reusing an existing view's class strings, so it is the risk.
+  // branch has no package.json or tailwind.config.js to rebuild it. A utility
+  // class invented in a component therefore renders as a silent no-op, which is
+  // exactly how a responsive fix ends up not applying on a phone. New
+  // responsive rules belong in css/app.css, which is hand-written.
+  // This scans every component and view, not just the install banner, so a
+  // missing class is caught at review time rather than on a device.
   const compiledCss = fs.readFileSync(path.join(ROOT, 'css/tailwind.css'), 'utf8');
-  const bannerSrc = fs.readFileSync(path.join(ROOT, 'js/components/installPrompt.js'), 'utf8');
-  const classAttr = [...bannerSrc.matchAll(/className\s*=\s*'([^']+)'|class="([^"]+)"/g)]
-    .map((m) => m[1] || m[2])
-    .join(' ')
-    // Keep only the plain class names, not the ${...} template holes.
-    .replace(/\$\{[^}]*\}/g, ' ')
-    .split(/\s+/)
-    .filter((c) => c && !c.includes('$'));
+  const appCss = fs.readFileSync(path.join(ROOT, 'css/app.css'), 'utf8');
+
+  // Classes the app defines itself in css/app.css are legitimately absent from
+  // the Tailwind build. Collect only real class selectors: a dot at the start of
+  // a declaration or after a brace or a combinator, so a decimal in a value
+  // (.stat-card-value is a selector, but `0.5` in a length is not) or a dot
+  // inside a media query does not register.
+  const CUSTOM_CLASSES = new Set();
+  for (const line of appCss.split('\n')) {
+    // Strip comments, then look for class selectors at declaration positions.
+    const code = line.replace(/\/\*.*?\*\//g, '');
+    for (const m of code.matchAll(/(?:^|[\s,{>+~])\.(-?[A-Za-z_][\w-]*)/g)) {
+      CUSTOM_CLASSES.add(m[1]);
+    }
+  }
+  // Semantic hooks used as JS/CSS targets rather than styles (selected by
+  // querySelector, and defined by no stylesheet). They carry no appearance.
+  const HOOK_CLASSES = new Set([
+    'group', 'active', 'onSort', 'empty-action', 'field-error', 'form-field',
+    'modal-backdrop', 'modal-close', 'modal-body', 'modal-actions',
+    'nav-item', 'brand-text', 'nav-label', 'btn-primary', 'res-book', 'lib-card'
+  ]);
+  // Lucide renders <svg> inside <i data-lucide>, and sr-only comes from the
+  // Tailwind preflight rather than a generated rule.
+  const PREFLIGHT = new Set(['sr-only']);
+
   // CSS escapes ':' and brackets in a selector (.z-\[9000\], .dark\:bg-slate-800).
-  const cssSelector = (name) => '.' + name.replace(/([:[\]/.\%])/g, '\\$1');
-  const absent = [...new Set(classAttr)].filter((c) => !compiledCss.includes(cssSelector(c)));
-  if (absent.length) fail(`installPrompt.js uses classes missing from css/tailwind.css: ${absent.join(', ')}`);
-  else pass(`all ${new Set(classAttr).size} install-banner classes exist in the compiled CSS`);
+  const cssSelector = (name) => '.' + name.replace(/([:[\]/.%])/g, '\\$1');
+  // A Tailwind utility name, not a leftover template fragment.
+  const looksLikeUtility = (c) => /^[a-z][\w-]*$/.test(c) || /^[a-z]+:[^\s]+$/.test(c);
+
+  const missingByFile = [];
+  let classTotal = 0;
+
+  for (const file of jsFiles) {
+    const src = fs.readFileSync(file, 'utf8');
+    const rel = path.relative(ROOT, file).replace(/\\/g, '/');
+    // Read only the literal class lists. A template hole like
+    // `${onSort ? 'cursor-pointer' : ''}` contributes nothing here; its literal
+    // branches are matched on their own elsewhere in the file.
+    const names = [
+      ...src.matchAll(/class(?:Name)?\s*=\s*(?:"([^"]*)"|'([^']*)'|`([^`]*)`)/g)
+    ]
+      .flatMap((m) => (m[1] || m[2] || m[3] || '').split(/\s+/))
+      // A template hole like ${onSort ? 'cursor-pointer' : ''} carries quotes
+      // and colons that are not part of any class name. Remove the whole
+      // expression first, then discard any leftover quote character.
+      .map((c) => c.replace(/\$\{[^}]*\}/g, ' ').replace(/['"]/g, ' ').trim())
+      .flatMap((c) => c.split(/\s+/));
+
+    if (!names.length) continue;
+    classTotal += new Set(names.filter(Boolean)).size;
+
+    const absent = [...new Set(names)].filter((c) => {
+      if (!c) return false;
+      // Drop fragments of an interpolated expression or a non-class token.
+      if (c.includes('$') || c.includes('{') || c.includes('}')) return false;
+      if (!looksLikeUtility(c)) return false;
+      if (PREFLIGHT.has(c) || HOOK_CLASSES.has(c) || CUSTOM_CLASSES.has(c)) return false;
+      return !compiledCss.includes(cssSelector(c));
+    });
+    if (absent.length) missingByFile.push(`${rel}: ${absent.join(', ')}`);
+  }
+
+  if (missingByFile.length) {
+    fail(`classes missing from css/tailwind.css (add them to css/app.css instead):\n      ${missingByFile.join('\n      ')}`);
+  } else {
+    pass(`all ${classTotal} class names across ${jsFiles.length} files exist in the compiled CSS or app.css`);
+  }
+
+  // ---- 9b. Responsive plumbing that cannot be expressed as a utility ----
+  // The shell uses 100vh utilities, which overshoot on a phone where the
+  // address bar collapses. These are overridden in css/app.css, so verify the
+  // overrides are actually there rather than trusting the comment.
+  const appCssChecks = [
+    ['--app-vh', /--app-vh:\s*100dvh/, 'dynamic viewport height'],
+    ['--safe-top', /--safe-top:\s*env\(safe-area-inset-top/, 'notch inset variable'],
+    ['--safe-bottom', /--safe-bottom:\s*env\(safe-area-inset-bottom/, 'home indicator inset variable'],
+    ['#topbar', /#topbar\s*\{[^}]*padding-top:\s*var\(--safe-top\)/, 'topbar clears the notch'],
+    ['#sidebar', /#sidebar\s*\{[^}]*padding-top:\s*var\(--safe-top\)/, 'drawer clears the notch'],
+    ['#sidebar.is-collapsed', /@media \(min-width: 1024px\)\s*\{[^@]*#sidebar\.is-collapsed\s*\{[^}]*width:\s*72px/, 'sidebar collapse is desktop-only'],
+    ['#install-banner', /#install-banner\s*\{[^}]*--safe-bottom/, 'install banner clears the home indicator'],
+    ['#toast-root', /#toast-root\s*\{[^}]*--safe-top/, 'toasts clear the notch'],
+    ['drawer-open', /body\.drawer-open\s*\{\s*overflow:\s*hidden/, 'page scroll locks behind the open drawer'],
+    ['checkbox hit area', /input\[type="checkbox"\]\s*(?::after\s*,)?[^}]*\{[^}]*\bwidth:\s*44px/, 'checkbox tap target is 44px'],
+    ['checkbox position', /input\[type="checkbox"\]\s*,\s*input\[type="radio"\]\s*\{\s*position:\s*relative/, 'checkbox is positioned so the hit area can be anchored']
+  ];
+  const missingCss = appCssChecks
+    .filter(([, re]) => !re.test(appCss))
+    .map(([name]) => name);
+  if (missingCss.length) fail(`css/app.css is missing responsive rules for: ${missingCss.join(', ')}`);
+  else pass(`css/app.css covers all ${appCssChecks.length} responsive overrides`);
+
+  // The mobile drawer must not be able to inherit the desktop collapse width.
+  const shellSrc = fs.readFileSync(path.join(ROOT, 'js/components/shell.js'), 'utf8');
+  if (/style="width:/.test(shellSrc)) {
+    fail('shell.js still sets the sidebar width with an inline style, which overrides the desktop-only collapse in css/app.css');
+  } else if (!/is-collapsed/.test(shellSrc)) {
+    fail('shell.js does not toggle the is-collapsed class the css/app.css rule depends on');
+  } else {
+    pass('sidebar collapse is applied as a class, not an inline width');
+  }
+
+  // A manifest that locks orientation makes a tablet or a desk unusable.
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.webmanifest'), 'utf8'));
+  if (manifest.orientation === 'portrait-primary') {
+    fail('manifest.webmanifest locks orientation to portrait, so the app cannot be used in landscape on a phone or tablet');
+  } else {
+    pass('manifest does not lock orientation');
+  }
+  if (manifest.display !== 'standalone') fail('manifest display should stay standalone so the app opens without browser chrome');
+  else pass('manifest opens in standalone display mode');
+
+  // The viewport opts into the display cutout, so something must consume the
+  // safe-area insets or the topbar renders underneath the notch when installed.
+  if (/viewport-fit=cover/.test(html) && !/safe-area-inset/.test(appCss)) {
+    fail('index.html sets viewport-fit=cover but css/app.css never reads env(safe-area-inset-*)');
+  } else {
+    pass('viewport-fit=cover is matched by safe-area handling');
+  }
+
 
   // ---- 10. The install event must be captured before the deferred module ----
   const installIndex = html.indexOf('beforeinstallprompt');
