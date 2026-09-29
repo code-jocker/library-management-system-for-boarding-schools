@@ -320,7 +320,7 @@ const list = asyncHandler(async (req, res) => {
   const [items, total] = await Promise.all([
     Transaction.find(filter)
       .populate('book', 'title isbn cover')
-      .populate('member', 'fullName admissionNo classLevel stream dormitory photo')
+      .populate('member', 'fullName admissionNo classLevel stream dormitory')
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
@@ -339,7 +339,7 @@ const overdue = asyncHandler(async (req, res) => {
     dueDate: { $lt: new Date() }
   })
     .populate('book', 'title isbn cover')
-    .populate('member', 'fullName admissionNo classLevel stream dormitory guardianName guardianPhone photo')
+      .populate('member', 'fullName admissionNo classLevel stream dormitory guardianName guardianPhone')
     .sort({ dueDate: 1 })
     .lean();
 

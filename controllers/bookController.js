@@ -40,7 +40,7 @@ const list = asyncHandler(async (req, res) => {
   };
   const sort = sortMap[req.query.sort] || { createdAt: -1 };
 
-  const [items, total] = await Promise.all([
+  const [itemsRaw, total] = await Promise.all([
     Book.find(filter)
       .populate('category', 'name color')
       .sort(sort)
@@ -49,6 +49,13 @@ const list = asyncHandler(async (req, res) => {
       .lean(),
     Book.countDocuments(filter)
   ]);
+
+  // Strip base64 cover images from the list payload — they are huge and not
+  // needed in the paginated list (loaded on demand in getOne).
+  const items = itemsRaw.map((b) => {
+    const { cover, ...rest } = b;
+    return rest;
+  });
 
   res.json({
     success: true,
@@ -75,7 +82,7 @@ const getOne = asyncHandler(async (req, res) => {
     Transaction.find({ book: book._id })
       .sort({ createdAt: -1 })
       .limit(20)
-      .populate('member', 'fullName admissionNo classLevel photo')
+      .populate('member', 'fullName admissionNo classLevel')
       .lean(),
     Reservation.countDocuments({ book: book._id, status: { $in: ['waiting', 'ready'] } })
   ]);

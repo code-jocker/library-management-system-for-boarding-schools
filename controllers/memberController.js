@@ -35,7 +35,7 @@ const list = asyncHandler(async (req, res) => {
   const sort = sortMap[req.query.sort] || { fullName: 1 };
 
   const [items, total] = await Promise.all([
-    Member.find(filter).sort(sort).skip((page - 1) * limit).limit(limit).lean(),
+    Member.find(filter).sort(sort).skip((page - 1) * limit).limit(limit).select('-photo').lean(),
     Member.countDocuments(filter)
   ]);
 
