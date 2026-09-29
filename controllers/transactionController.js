@@ -11,6 +11,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const { logActivity } = require('../utils/activityLogger');
 const { calculateFine, daysOverdue } = require('../utils/fineCalculator');
 const { nextReceiptNo } = require('../utils/receiptNumber');
+const eventBus = require('../utils/eventBus');
 
 function addDays(date, days) {
   const d = new Date(date);
@@ -130,6 +131,7 @@ const issue = asyncHandler(async (req, res) => {
     data: { transaction: populated, dueDate: finalDue },
     message: `"${book.title}" issued to ${member.fullName}`
   });
+  eventBus.emit('transaction:issued', { memberId: member._id, bookId: book._id, transactionId: txn._id });
 });
 
 // POST /api/transactions/return
@@ -209,6 +211,7 @@ const returnBook = asyncHandler(async (req, res) => {
       ? `Returned. Overdue fine of ${settings.currencySymbol} ${amount.toLocaleString()} (${days} day(s)).`
       : 'Returned successfully. No fine.'
   });
+  eventBus.emit('transaction:returned', { memberId: txn.member._id, bookId: txn.book._id, transactionId: txn._id });
 });
 
 // POST /api/transactions/renew
@@ -241,6 +244,7 @@ const renew = asyncHandler(async (req, res) => {
   await logActivity({ req, action: 'renew', entity: 'transaction', entityId: txn._id, message: `Renewed "${txn.book.title}" (now due ${txn.dueDate.toDateString()})` });
 
   res.json({ success: true, data: { transaction: txn, dueDate: txn.dueDate }, message: `Renewed until ${txn.dueDate.toLocaleDateString()}` });
+  eventBus.emit('transaction:renewed', { memberId: txn.member._id, bookId: txn.book._id, transactionId: txn._id });
 });
 
 // POST /api/transactions/mark-lost   and   mark-damaged share this handler.
