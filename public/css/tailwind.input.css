@@ -1,6 +1,0 @@
-/* public/css/tailwind.input.css
-   Source file for the Tailwind build. `npm run build:css` compiles this into
-   public/css/tailwind.css, which index.html loads instead of the Play CDN. */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
