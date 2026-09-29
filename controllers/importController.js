@@ -39,6 +39,41 @@ function handleAborted(fn) {
   };
 }
 
+// In-memory progress tracking for large imports
+const importProgress = new Map();
+
+function setProgress(importId, progress) {
+  importProgress.set(importId, { ...progress, updatedAt: Date.now() });
+}
+
+function getProgress(importId) {
+  return importProgress.get(importId) || { status: 'not_found' };
+}
+
+function clearProgress(importId) {
+  importProgress.delete(importId);
+}
+
+// Clean up old progress entries (older than 1 hour)
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, progress] of importProgress.entries()) {
+    if (now - (progress.updatedAt || 0) > 3600000) {
+      importProgress.delete(id);
+    }
+  }
+}, 300000); // Check every 5 minutes
+
+// Progress endpoint
+async function getImportProgress(req, res) {
+  const { importId } = req.query;
+  if (!importId) {
+    return res.status(400).json({ success: false, message: 'importId is required' });
+  }
+  const progress = getProgress(importId);
+  res.json({ success: true, data: progress });
+}
+
 // Configure multer for file uploads (in memory)
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -170,67 +205,95 @@ async function handleBooks(req, res, commit) {
   // Preload existing ISBNs to detect duplicates within the file and DB.
   const existingIsbns = new Set((await Book.find({}, { isbn: 1 }).lean()).map((b) => b.isbn.toLowerCase()));
 
-  const results = { created: 0, skipped: 0, failed: 0, details: [] };
+  const results = { created: 0, failed: 0, details: [] };
   const seenInFile = new Set();
+  const validDocs = [];
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     const lineNo = i + 1;
     const errors = {};
 
-    const title = (r.title || r.Title || '').toString().trim();
-    const author = (r.author || r.Author || '').toString().trim();
-    const isbn = (r.isbn || r.ISBN || r.code || '').toString().trim();
-    const categoryName = (r.category || r.Category || '').toString().trim();
+    // Get ISBN from various possible fields
+    const isbn = (r.isbn || r.ISBN || r.code || r.isbn13 || r['isbn-13'] || '').toString().trim();
+    const title = (r.title || r['book title'] || '').toString().trim();
+    const author = (r.author || r.authors || '').toString().trim();
+    const categoryName = (r.category || r.categories || '').toString().trim();
     const totalCopies = parseInt(r.totalCopies || r.copies || r.Copies || '1', 10);
 
     if (!title) errors.title = 'Required';
     if (!author) errors.author = 'Required';
-    if (!isbn) errors.isbn = 'Required';
-    else if (existingIsbns.has(isbn.toLowerCase())) errors.isbn = 'Already exists in library';
-    else if (seenInFile.has(isbn.toLowerCase())) errors.isbn = 'Duplicate within this file';
+    if (!isbn) {
+      errors.isbn = 'Required';
+    } else if (existingIsbns.has(isbn.toLowerCase())) {
+      errors.isbn = 'Already exists in library';
+    } else if (seenInFile.has(isbn.toLowerCase())) {
+      errors.isbn = 'Duplicate within this file';
+    }
     if (Number.isNaN(totalCopies) || totalCopies < 1) errors.totalCopies = 'Must be 1 or more';
 
     const hasErrors = Object.keys(errors).length > 0;
     if (!hasErrors) seenInFile.add(isbn.toLowerCase());
 
-    if (commit && !hasErrors) {
-      try {
-        await Book.create({
-          title, author, isbn,
-          category: categoryName ? (catMap.get(categoryName.toLowerCase()) || null) : null,
-          publisher: (r.publisher || '').toString().trim(),
-          year: r.year ? parseInt(r.year, 10) || null : null,
-          edition: (r.edition || '').toString().trim(),
-          shelfLocation: (r.shelfLocation || r.shelf || '').toString().trim(),
-          language: (r.language || 'English').toString().trim(),
-          totalCopies,
-          availableCopies: totalCopies,
-          description: (r.description || '').toString().trim(),
-          replacementValue: r.replacementValue ? Number(r.replacementValue) || 0 : 0
-        });
-        results.created += 1;
-        results.details.push({ line: lineNo, status: 'created', isbn });
-      } catch (e) {
-        results.failed += 1;
-        results.details.push({ line: lineNo, status: 'failed', isbn, reason: e.message });
+    if (!hasErrors) {
+      const doc = {
+        title, author, isbn,
+        category: categoryName ? (catMap.get(categoryName.toLowerCase()) || null) : null,
+        publisher: (r.publisher || '').toString().trim(),
+        year: r.year ? parseInt(r.year, 10) || null : null,
+        edition: (r.edition || '').toString().trim(),
+        shelfLocation: (r.shelfLocation || r.shelf || r['shelf location'] || '').toString().trim(),
+        language: (r.language || 'English').toString().trim(),
+        totalCopies,
+        availableCopies: totalCopies,
+        description: (r.description || '').toString().trim(),
+        replacementValue: r.replacementValue ? Number(r.replacementValue) || 0 : 0
+      };
+      
+      if (commit) {
+        validDocs.push(doc);
       }
-    } else if (hasErrors) {
+      results.details.push({ line: lineNo, status: commit ? 'pending' : 'valid', isbn });
+    } else {
       results.failed += 1;
       results.details.push({ line: lineNo, status: 'invalid', isbn, errors });
-    } else {
-      // Preview mode, valid row.
-      results.skipped += 0;
-      results.details.push({ line: lineNo, status: 'valid', isbn });
     }
   }
 
-  if (commit) {
-    await logActivity({ req, action: 'import', entity: 'book', message: `Imported ${results.created} book(s) from file` });
+  // BULK INSERT for books
+  if (commit && validDocs.length > 0) {
+    try {
+      const bulkResult = await Book.insertMany(validDocs, { ordered: false, lean: true });
+      results.created = bulkResult.length;
+      
+      bulkResult.forEach((doc, idx) => {
+        const detailIdx = results.details.findIndex(d => d.status === 'pending' && d.isbn === doc.isbn);
+        if (detailIdx !== -1) {
+          results.details[detailIdx] = { line: detailIdx + 1, status: 'created', isbn: doc.isbn };
+        }
+      });
+      
+      await logActivity({ req, action: 'import', entity: 'book', message: `Imported ${results.created} book(s) from file` });
+    } catch (e) {
+      if (e.writeErrors) {
+        const successful = validDocs.length - e.writeErrors.length;
+        results.created = successful;
+        
+        e.writeErrors.forEach(err => {
+          const isbn = err.doc.isbn;
+          const detailIdx = results.details.findIndex(d => d.status === 'pending' && d.isbn === isbn);
+          if (detailIdx !== -1) {
+            results.details[detailIdx] = { line: detailIdx + 1, status: 'failed', isbn, reason: err.errmsg };
+          }
+        });
+      } else {
+        throw e;
+      }
+    }
   }
 
   const preview = !commit;
-  const valid = results.details.filter((d) => d.status === 'valid' || d.status === 'created').length;
+  const valid = results.details.filter((d) => d.status === 'valid' || d.status === 'created' || d.status === 'pending').length;
   const invalid = results.details.filter((d) => d.status === 'invalid' || d.status === 'failed').length;
 
   res.json({
@@ -244,17 +307,13 @@ async function handleMembers(req, res, commit) {
   const rows = Array.isArray(req.body.rows) ? req.body.rows : [];
   if (!rows.length) return res.status(400).json({ success: false, message: 'No rows to import' });
 
-  const existing = new Set((await Member.find({}, { admissionNo: 1 }).lean()).map((m) => m.admissionNo.toUpperCase()));
-
-  // Load settings to validate against configured class levels, streams, and dormitories.
+  // Load settings once
   const settings = await Setting.get();
   const validClassLevels = new Set((settings.classLevels || []).map((c) => c.toLowerCase()));
   const validStreams = new Set((settings.streams || []).map((s) => s.toLowerCase()));
   const validDormitories = new Set((settings.dormitories || []).map((d) => d.toLowerCase()));
 
-  // Normalize a gender cell to the schema enum, tolerating case + common
-  // abbreviations. Anything unrecognized (or missing) falls back to 'Other'
-  // so a row is never rejected just because the file lacked a clean value.
+  // Normalize gender
   const normalizeGender = (val) => {
     const v = (val || '').toString().trim().toLowerCase();
     if (v === 'male' || v === 'm') return 'Male';
@@ -262,27 +321,36 @@ async function handleMembers(req, res, commit) {
     return 'Other';
   };
 
+  // Pre-fetch ALL existing admission numbers ONCE (not per row)
+  const existingAdmissionNos = new Set(
+    (await Member.find({}, { admissionNo: 1 }).lean()).map((m) => m.admissionNo.toUpperCase())
+  );
+
   const results = { created: 0, details: [] };
-  const seen = new Set();
+  const seenInFile = new Set();
+  const validDocs = []; // Documents ready for bulk insert
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     const lineNo = i + 1;
     const errors = {};
 
-    const fullName = (r.fullName || r.name || r.Name || '').toString().trim();
-    // Admission number is optional; when omitted the system generates one.
-    const admissionNo = (r.admissionNo || r.admission || r.AdmissionNo || '').toString().trim().toUpperCase();
+    // Get admission number from various possible fields
+    const rawAdmissionNo = r.admissionNo || r.admission || r.AdmissionNo || r.admissionno || r['admission no'] || r.id || '';
+    const admissionNo = String(rawAdmissionNo).trim().toUpperCase();
+
+    const fullName = (r.fullName || r.name || r.Name || r.fullname || '').toString().trim();
 
     if (!fullName) errors.fullName = 'Required';
+    
     if (admissionNo) {
-      if (existing.has(admissionNo)) errors.admissionNo = 'Already exists';
-      else if (seen.has(admissionNo)) errors.admissionNo = 'Duplicate within this file';
+      if (existingAdmissionNos.has(admissionNo)) errors.admissionNo = 'Already exists in database';
+      else if (seenInFile.has(admissionNo)) errors.admissionNo = 'Duplicate within this file';
     }
 
-    const classLevel = (r.classLevel || r.class || '').toString().trim();
-    const stream = (r.stream || '').toString().trim();
-    const dormitory = (r.dormitory || '').toString().trim();
+    const classLevel = (r.classLevel || r.class || r.classlevel || r['class level'] || r.grade || '').toString().trim();
+    const stream = (r.stream || r.section || '').toString().trim();
+    const dormitory = (r.dormitory || r.dorm || r.hostel || '').toString().trim();
 
     if (classLevel && validClassLevels.size > 0 && !validClassLevels.has(classLevel.toLowerCase())) {
       errors.classLevel = `Not a valid class (${settings.classLevels.join(', ')})`;
@@ -295,45 +363,74 @@ async function handleMembers(req, res, commit) {
     }
 
     const hasErrors = Object.keys(errors).length > 0;
-    if (!hasErrors && admissionNo) seen.add(admissionNo);
-
-    if (commit && !hasErrors) {
-      try {
-        // Generate a fresh number only when the row did not supply one. Each
-        // create is committed before the next generate, so the sequence climbs.
-        const finalAdmissionNo = admissionNo || await nextAdmissionNo();
-        await Member.create({
-          fullName, admissionNo: finalAdmissionNo,
-          gender: normalizeGender(r.gender),
-          memberType: (r.memberType || '').toString().toLowerCase() === 'teacher' ? 'teacher' : 'student',
-          classLevel,
-          stream,
-          dormitory,
-          phone: (r.phone || '').toString().trim(),
-          guardianName: (r.guardianName || '').toString().trim(),
-          guardianPhone: (r.guardianPhone || '').toString().trim(),
-          // Imported members are always active, whether or not the file has a
-          // status column — the library desk re-activates them in person later.
-          status: 'active'
-        });
-        results.created += 1;
-        results.details.push({ line: lineNo, status: 'created', admissionNo: finalAdmissionNo });
-      } catch (e) {
-        results.details.push({ line: lineNo, status: 'failed', admissionNo, reason: e.message });
+    
+    if (!hasErrors) {
+      if (admissionNo) seenInFile.add(admissionNo);
+      
+      // Prepare document for bulk insert
+      const finalAdmissionNo = admissionNo; // Use the admission number from the file
+      const doc = {
+        fullName,
+        admissionNo: finalAdmissionNo,
+        gender: normalizeGender(r.gender),
+        memberType: (r.memberType || r['member type'] || r.type || '').toString().toLowerCase() === 'teacher' ? 'teacher' : 'student',
+        classLevel,
+        stream,
+        dormitory,
+        phone: (r.phone || r.telephone || r.mobile || '').toString().trim(),
+        guardianName: (r.guardianName || r['guardian name'] || r['parent name'] || '').toString().trim(),
+        guardianPhone: (r.guardianPhone || r['guardian phone'] || r['parent phone'] || '').toString().trim(),
+        status: 'active'
+      };
+      
+      // Only add to bulk insert if commit mode
+      if (commit) {
+        validDocs.push(doc);
       }
-    } else if (hasErrors) {
-      results.details.push({ line: lineNo, status: 'invalid', admissionNo, errors });
+      results.details.push({ line: lineNo, status: commit ? 'pending' : 'valid', admissionNo: finalAdmissionNo });
     } else {
-      results.details.push({ line: lineNo, status: 'valid', admissionNo });
+      results.details.push({ line: lineNo, status: 'invalid', admissionNo, errors });
     }
   }
 
-  if (commit) {
-    await logActivity({ req, action: 'import', entity: 'member', message: `Imported ${results.created} member(s) from file` });
+  // BULK INSERT - much faster for large datasets
+  if (commit && validDocs.length > 0) {
+    try {
+      // Use ordered: false to continue on duplicate key errors
+      const bulkResult = await Member.insertMany(validDocs, { ordered: false, lean: true });
+      results.created = bulkResult.length;
+      
+      // Update details with actual created admission numbers
+      bulkResult.forEach((doc, idx) => {
+        const detailIdx = results.details.findIndex(d => d.status === 'pending' && d.admissionNo === doc.admissionNo);
+        if (detailIdx !== -1) {
+          results.details[detailIdx] = { line: detailIdx + 1, status: 'created', admissionNo: doc.admissionNo };
+        }
+      });
+      
+      await logActivity({ req, action: 'import', entity: 'member', message: `Imported ${results.created} member(s) from file` });
+    } catch (e) {
+      // Handle partial failures (e.g., duplicate key errors from race conditions)
+      if (e.writeErrors) {
+        const successful = validDocs.length - e.writeErrors.length;
+        results.created = successful;
+        
+        // Mark failed rows
+        e.writeErrors.forEach(err => {
+          const admissionNo = err.doc.admissionNo;
+          const detailIdx = results.details.findIndex(d => d.status === 'pending' && d.admissionNo === admissionNo);
+          if (detailIdx !== -1) {
+            results.details[detailIdx] = { line: detailIdx + 1, status: 'failed', admissionNo, reason: err.errmsg };
+          }
+        });
+      } else {
+        throw e;
+      }
+    }
   }
 
   const preview = !commit;
-  const valid = results.details.filter((d) => d.status === 'valid' || d.status === 'created').length;
+  const valid = results.details.filter((d) => d.status === 'valid' || d.status === 'created' || d.status === 'pending').length;
   const invalid = results.details.filter((d) => d.status === 'invalid' || d.status === 'failed').length;
 
   res.json({
@@ -349,18 +446,44 @@ async function handleBooksFile(req, res, commit) {
     return res.status(400).json({ success: false, message: 'No file uploaded' });
   }
   
+  // Generate import ID for progress tracking
+  const importId = req.body.importId || `import_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  setProgress(importId, { status: 'parsing', total: 0, processed: 0, created: 0, failed: 0 });
+  
   try {
     let rows = parseExcelFile(req.file.buffer, req.file.originalname);
     rows = normalizeHeaders(rows, BOOK_HEADER_MAP);
     
     if (!rows.length) {
+      clearProgress(importId);
       return res.status(400).json({ success: false, message: 'No data rows found in file. Please ensure the file has headers and at least one data row.' });
     }
     
+    setProgress(importId, { status: 'validating', total: rows.length, processed: 0, created: 0, failed: 0 });
+    
     // Attach rows to body for reuse of existing logic
     req.body.rows = rows;
+    req.body.importId = importId;
+    
+    // Wrap handleBooks to track progress
+    const originalJson = res.json.bind(res);
+    res.json = (data) => {
+      if (data.success && data.data) {
+        setProgress(importId, { 
+          status: 'complete', 
+          total: data.data.summary.total, 
+          processed: data.data.summary.total, 
+          created: data.data.summary.created, 
+          failed: data.data.summary.invalid,
+          details: data.data.details 
+        });
+      }
+      return originalJson(data);
+    };
+    
     return handleBooks(req, res, commit);
   } catch (e) {
+    clearProgress(importId);
     console.error('Excel parse error:', e);
     return res.status(400).json({ success: false, message: `Failed to parse file: ${e.message}` });
   }
@@ -372,18 +495,44 @@ async function handleMembersFile(req, res, commit) {
     return res.status(400).json({ success: false, message: 'No file uploaded' });
   }
   
+  // Generate import ID for progress tracking
+  const importId = req.body.importId || `import_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  setProgress(importId, { status: 'parsing', total: 0, processed: 0, created: 0, failed: 0 });
+  
   try {
     let rows = parseExcelFile(req.file.buffer, req.file.originalname);
     rows = normalizeHeaders(rows, MEMBER_HEADER_MAP);
     
     if (!rows.length) {
+      clearProgress(importId);
       return res.status(400).json({ success: false, message: 'No data rows found in file. Please ensure the file has headers and at least one data row.' });
     }
     
+    setProgress(importId, { status: 'validating', total: rows.length, processed: 0, created: 0, failed: 0 });
+    
     // Attach rows to body for reuse of existing logic
     req.body.rows = rows;
+    req.body.importId = importId;
+    
+    // Wrap handleMembers to track progress
+    const originalJson = res.json.bind(res);
+    res.json = (data) => {
+      if (data.success && data.data) {
+        setProgress(importId, { 
+          status: 'complete', 
+          total: data.data.summary.total, 
+          processed: data.data.summary.total, 
+          created: data.data.summary.created, 
+          failed: data.data.summary.invalid,
+          details: data.data.details 
+        });
+      }
+      return originalJson(data);
+    };
+    
     return handleMembers(req, res, commit);
   } catch (e) {
+    clearProgress(importId);
     console.error('Excel parse error:', e);
     return res.status(400).json({ success: false, message: `Failed to parse file: ${e.message}` });
   }
@@ -537,5 +686,6 @@ module.exports = {
   commitMembersFile: handleAborted((req, res) => handleMembersFile(req, res, true)),
   updateImportRow: handleAborted(updateImportRow),
   validateImportRow: handleAborted(validateImportRow),
+  getImportProgress: getImportProgress,
   upload: upload.single('file')
 };

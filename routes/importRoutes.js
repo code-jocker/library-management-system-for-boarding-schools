@@ -22,4 +22,7 @@ router.post('/members/commit/file', ctrl.upload, ctrl.commitMembersFile);
 router.post('/validate-row', ctrl.validateImportRow);
 router.post('/update-row', ctrl.updateImportRow);
 
+// Progress tracking for large imports
+router.get('/progress', ctrl.getImportProgress);
+
 module.exports = router;
