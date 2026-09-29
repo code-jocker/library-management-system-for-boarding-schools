@@ -7,7 +7,6 @@ const Category = require('../models/Category');
 const Setting = require('../models/Setting');
 const asyncHandler = require('../utils/asyncHandler');
 const { logActivity } = require('../utils/activityLogger');
-const { nextAdmissionNo } = require('../utils/admissionNo');
 const XLSX = require('xlsx');
 const multer = require('multer');
 
@@ -330,6 +329,9 @@ async function handleMembers(req, res, commit) {
   const seenInFile = new Set();
   const validDocs = []; // Documents ready for bulk insert
 
+  // Track the next admission number to generate (for rows without one)
+  let nextAdmissionCounter = null;
+
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     const lineNo = i + 1;
@@ -343,9 +345,35 @@ async function handleMembers(req, res, commit) {
 
     if (!fullName) errors.fullName = 'Required';
     
+    let finalAdmissionNo = admissionNo;
+    
     if (admissionNo) {
+      // Admission number provided in file - validate it
       if (existingAdmissionNos.has(admissionNo)) errors.admissionNo = 'Already exists in database';
       else if (seenInFile.has(admissionNo)) errors.admissionNo = 'Duplicate within this file';
+    } else {
+      // No admission number provided - will auto-generate
+      // Initialize counter from the highest existing number if not already done
+      if (nextAdmissionCounter === null) {
+        // Get the highest admission number to continue sequence
+        const lastMember = await Member.findOne().sort({ admissionNo: -1 }).select('admissionNo').lean();
+        if (lastMember && lastMember.admissionNo) {
+          const match = lastMember.admissionNo.match(/(\d+)$/);
+          if (match) {
+            nextAdmissionCounter = parseInt(match[1], 10);
+          }
+        }
+        if (nextAdmissionCounter === null) nextAdmissionCounter = 1000;
+      }
+      // Generate next number
+      nextAdmissionCounter++;
+      finalAdmissionNo = `ADM${String(nextAdmissionCounter).padStart(4, '0')}`;
+      
+      // Ensure generated number doesn't conflict with existing or file duplicates
+      while (existingAdmissionNos.has(finalAdmissionNo) || seenInFile.has(finalAdmissionNo)) {
+        nextAdmissionCounter++;
+        finalAdmissionNo = `ADM${String(nextAdmissionCounter).padStart(4, '0')}`;
+      }
     }
 
     const classLevel = (r.classLevel || r.class || r.classlevel || r['class level'] || r.grade || '').toString().trim();
@@ -365,10 +393,9 @@ async function handleMembers(req, res, commit) {
     const hasErrors = Object.keys(errors).length > 0;
     
     if (!hasErrors) {
-      if (admissionNo) seenInFile.add(admissionNo);
+      seenInFile.add(finalAdmissionNo);
       
       // Prepare document for bulk insert
-      const finalAdmissionNo = admissionNo; // Use the admission number from the file
       const doc = {
         fullName,
         admissionNo: finalAdmissionNo,
@@ -389,7 +416,7 @@ async function handleMembers(req, res, commit) {
       }
       results.details.push({ line: lineNo, status: commit ? 'pending' : 'valid', admissionNo: finalAdmissionNo });
     } else {
-      results.details.push({ line: lineNo, status: 'invalid', admissionNo, errors });
+      results.details.push({ line: lineNo, status: 'invalid', admissionNo: finalAdmissionNo, errors });
     }
   }
 
