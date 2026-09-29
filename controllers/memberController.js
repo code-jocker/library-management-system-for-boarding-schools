@@ -53,7 +53,7 @@ const lookup = asyncHandler(async (req, res) => {
 
   // Current loans + live overdue/fine info for the desk card.
   const loans = await Transaction.find({ member: member._id, status: { $in: ['borrowed', 'overdue'] } })
-    .populate('book', 'title isbn cover')
+    .populate('book', 'title isbn')
     .sort({ dueDate: 1 })
     .lean();
 
@@ -99,12 +99,12 @@ const getOne = asyncHandler(async (req, res) => {
 
   const [loans, fines, history] = await Promise.all([
     Transaction.find({ member: member._id, status: { $in: ['borrowed', 'overdue'] } })
-      .populate('book', 'title isbn cover dueDate')
+      .populate('book', 'title isbn dueDate')
       .sort({ dueDate: 1 })
       .lean(),
     Fine.find({ member: member._id }).sort({ createdAt: -1 }).lean(),
     Transaction.find({ member: member._id }).sort({ createdAt: -1 }).limit(50)
-      .populate('book', 'title isbn cover')
+      .populate('book', 'title isbn')
       .lean()
   ]);
 
