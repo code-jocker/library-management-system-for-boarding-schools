@@ -20,5 +20,7 @@ router.post('/bulk', [
   body('channel').optional().isIn(['whatsapp', 'email', 'both']).withMessage('Channel must be whatsapp, email or both'),
   body('limit').optional().isInt({ min: 1, max: 500 }).withMessage('Limit must be between 1 and 500')
 ], validate, ctrl.sendBulkReminders);
+router.post('/subscribe', ctrl.subscribe);
+router.delete('/subscribe/:id', ctrl.unsubscribe);
 
 module.exports = router;

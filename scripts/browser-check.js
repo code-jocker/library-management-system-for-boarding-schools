@@ -249,6 +249,78 @@ const STUB = () => {
       check('sidebar has Reminders', state.nav.some((n) => n.includes('Reminders')), state.nav);
     }
 
+    if (ROUTE.includes('install')) {
+      // The banner only shows once the browser offers a prompt, which headless
+      // Chrome will not do on its own. Fire a synthetic event carrying the same
+      // shape so the real code path runs.
+      const shown = await cdp.eval(`
+        const evt = new Event('beforeinstallprompt', { cancelable: true });
+        evt.prompt = () => { window.__promptCalled = true; };
+        Object.defineProperty(evt, 'userChoice', { value: Promise.resolve({ outcome: 'accepted' }) });
+        window.dispatchEvent(evt);
+        await new Promise(r => setTimeout(r, 2500));
+        const banner = document.getElementById('install-banner');
+        return {
+          stored: window.__installPrompt === evt,
+          exists: !!banner,
+          title: banner ? (banner.querySelector('h2') || {}).textContent : null,
+          body: banner ? (banner.querySelector('p') || {}).textContent : null,
+          hasAccept: !!(banner && banner.querySelector('#install-accept')),
+          hasLater: !!(banner && banner.querySelector('#install-later')),
+          iconLoaded: !!(banner && banner.querySelector('img[src="/images/icon.png"]')),
+          position: banner ? banner.style.cssText : null
+        };
+      `);
+      console.log('  banner:', JSON.stringify(shown));
+      check('the beforeinstallprompt event was stashed', shown.stored, shown);
+      check('the banner appeared', shown.exists, shown);
+      check('banner shows the translated title', shown.title === 'Library Assistant'.replace('Library Assistant', 'Install the Library app'), shown.title);
+      check('banner shows the body copy', typeof shown.body === 'string' && shown.body.length > 20, shown.body);
+      check('Install button is present when promptable', shown.hasAccept, shown);
+      check('dismiss button is present', shown.hasLater, shown);
+      check('app icon is shown', shown.iconLoaded, shown);
+      check('banner is positioned at the bottom centre', /bottom/.test(shown.position || ''), shown.position);
+
+      // Clicking Install must call prompt() and record the install.
+      const accepted = await cdp.eval(`
+        document.getElementById('install-banner').querySelector('#install-accept').click();
+        await new Promise(r => setTimeout(r, 600));
+        return {
+          promptCalled: window.__promptCalled === true,
+          gone: !document.getElementById('install-banner'),
+          done: localStorage.getItem('lms.install.done')
+        };
+      `);
+      console.log('  accept:', JSON.stringify(accepted));
+      check('clicking Install called prompt()', accepted.promptCalled, accepted);
+      check('banner closed after accepting', accepted.gone, accepted);
+      check('install recorded so it never nags again', accepted.done === '1', accepted);
+
+      // A dismissed banner must be suppressed on the next visit.
+      const redisplay = await cdp.eval(`
+        localStorage.removeItem('lms.install.done');
+        localStorage.setItem('lms.install.dismissedAt', String(Date.now()));
+        window.dispatchEvent(new CustomEvent('lms:installable'));
+        await new Promise(r => setTimeout(r, 2000));
+        return { shown: !!document.getElementById('install-banner') };
+      `);
+      check('a recently dismissed banner is not shown again', redisplay.shown === false, redisplay);
+
+      // ...but it comes back after the 14-day window.
+      const after14 = await cdp.eval(`
+        localStorage.setItem('lms.install.dismissedAt', String(Date.now() - 15 * 86400000));
+        window.dispatchEvent(new CustomEvent('lms:installable'));
+        await new Promise(r => setTimeout(r, 2000));
+        const b = document.getElementById('install-banner');
+        const onlyDismiss = b && !b.querySelector('#install-accept');
+        if (b) b.remove();
+        return { shownAgain: !!b, onlyDismissButton: !!onlyDismiss };
+      `);
+      console.log('  after 14 days:', JSON.stringify(after14));
+      check('banner returns after 14 days', after14.shownAgain === true, after14);
+      check('non-promptable browser shows only a dismiss button', after14.onlyDismissButton === true, after14);
+    }
+
     const realErrors = cdp.errors.filter((e) => !/sw disabled in check|Failed to load resource.*(unpkg|jsdelivr|fonts)/i.test(e));
     check('no page errors', realErrors.length === 0, realErrors);
   } finally {

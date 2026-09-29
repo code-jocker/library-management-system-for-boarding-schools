@@ -2,10 +2,12 @@
 // Express app: security, compression, REST API.
 require('dotenv').config();
 const express = require('express');
+const http = require('http');
 const helmet = require('helmet');
 const cors = require('cors');
 const compression = require('compression');
 const morgan = require('morgan');
+const jwt = require('jsonwebtoken');
 
 const connectDB = require('./config/db');
 const notFound = require('./middleware/notFound');
@@ -13,6 +15,9 @@ const errorHandler = require('./middleware/errorHandler');
 const { apiLimiter } = require('./middleware/rateLimiter');
 const User = require('./models/User');
 const Setting = require('./models/Setting');
+const push = require('./utils/pushNotifications');
+const scheduler = require('./utils/scheduler');
+const eventBus = require('./utils/eventBus');
 
 const app = express();
 
@@ -49,7 +54,7 @@ app.use(
 );
 
 app.use(compression());
-app.use(express.json({ limit: '5mb' })); // room for base64 images
+app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
@@ -113,7 +118,7 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-// Auto-seed the librarian account if no users exist in the database.
+// Auto-seed the librarian account.
 async function autoSeed() {
   try {
     console.log('[server] Auto-seed: checking database...');
@@ -139,15 +144,55 @@ async function autoSeed() {
   }
 }
 
-async function start() {
-  await connectDB();
-  await autoSeed();
-  app.listen(PORT, () => {
+function start() {
+  const server = http.createServer(app);
+  const { Server } = require('socket.io');
+  const io = new Server(server, {
+    cors: {
+      origin: allowedOrigins.length ? allowedOrigins : true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE']
+    }
+  });
+
+  // JWT auth for WebSocket connections.
+  io.use(async (socket, next) => {
+    const token = socket.handshake.auth?.token || socket.handshake.headers.authorization?.split(' ')[1];
+    if (!token) return next(new Error('Missing auth token'));
+    try {
+      const payload = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findById(payload.sub).select('-passwordHash').lean();
+      if (!user) return next(new Error('User not found'));
+      socket.user = user;
+      next();
+    } catch (err) {
+      next(new Error('Invalid token'));
+    }
+  });
+
+  io.on('connection', (socket) => {
+    console.log(`[socket] User connected: ${socket.user.username}`);
+    socket.join(socket.user._id.toString());
+    socket.on('disconnect', () => {
+      console.log(`[socket] User disconnected: ${socket.user.username}`);
+    });
+  });
+
+  eventBus.init(io);
+  push.init();
+  scheduler.start();
+
+  server.listen(PORT, () => {
     console.log(`[server] Library System API running at http://localhost:${PORT}`);
   });
 }
 
-start().catch((err) => {
+async function boot() {
+  await connectDB();
+  await autoSeed();
+  start();
+}
+
+boot().catch((err) => {
   console.error('[server] Failed to start:', err);
   process.exit(1);
 });

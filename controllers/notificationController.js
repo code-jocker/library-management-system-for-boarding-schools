@@ -9,6 +9,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const { logActivity } = require('../utils/activityLogger');
 const { buildReminder, whatsappLink, isUsablePhone, isUsableEmail } = require('../utils/messageTemplates');
 const mailer = require('../utils/mailer');
+const push = require('../utils/pushNotifications');
 
 const NOW = () => new Date();
 
@@ -363,9 +364,36 @@ const channels = asyncHandler(async (req, res) => {
     success: true,
     data: {
       whatsapp: { available: true, mode: 'deep-link', note: 'Returns wa.me links to open; no paid API needed' },
-      email: { available: mailer.isMailConfigured(), mode: 'smtp', host: mailer.config().host || null }
+      email: { available: mailer.isMailConfigured(), mode: 'smtp', host: mailer.config().host || null },
+      push: { available: push.isConfigured(), vapidPublicKey: push.publicKey() }
     }
   });
 });
 
-module.exports = { overdue, history, sendReminder, sendBulkReminders, exportWhatsapp, channels };
+// POST /api/notifications/subscribe  { endpoint, keys: { p256dh, auth } }
+// Store the librarian's browser subscription for push notifications.
+const subscribe = asyncHandler(async (req, res) => {
+  const { endpoint, keys } = req.body;
+  if (!endpoint || !keys || !keys.p256dh || !keys.auth) {
+    return res.status(400).json({ success: false, message: 'Invalid subscription payload' });
+  }
+
+  // Upsert: keep the latest subscription for this user.
+  const existing = await Subscription.findOne({ user: req.user._id, endpoint });
+  if (existing) {
+    existing.keys = keys;
+    await existing.save();
+  } else {
+    await Subscription.create({ user: req.user._id, endpoint, keys });
+  }
+
+  res.json({ success: true, message: 'Push subscription saved' });
+});
+
+// DELETE /api/notifications/subscribe/:id
+const unsubscribe = asyncHandler(async (req, res) => {
+  await Subscription.deleteOne({ _id: req.params.id, user: req.user._id });
+  res.json({ success: true, message: 'Push subscription removed' });
+});
+
+module.exports = { overdue, history, sendReminder, sendBulkReminders, exportWhatsapp, channels, subscribe, unsubscribe, collectTargets };
