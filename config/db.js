@@ -23,7 +23,7 @@ async function connectDB() {
 
     // In production autoIndex is off (avoids startup blocking), so build any
     // missing indexes explicitly here — e.g. Book text index for the search box.
-    const models = require('./models');
+    const models = require('../models');
     await Promise.all(models.map((m) => m.createIndexes().catch((e) => console.warn(`[db] index error on ${m.modelName}:`, e.message))));
 
     return conn;
