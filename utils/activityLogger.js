@@ -22,7 +22,7 @@ async function logActivity({ req, action, entity = '', entityId = '', message = 
       entityId: entityId ? String(entityId) : '',
       message,
       meta,
-      ip: req ? (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim() : ''
+      ip: req ? ((req.headers && (req.headers['x-forwarded-for'] || req.ip)) || '').toString().split(',')[0].trim() : ''
     });
   } catch (err) {
     // Logging must never break the main flow.

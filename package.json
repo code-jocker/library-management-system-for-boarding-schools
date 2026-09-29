@@ -10,6 +10,7 @@
     "build:css": "tailwindcss -i ./public/css/tailwind.input.css -o ./public/css/tailwind.css --minify",
     "watch:css": "tailwindcss -i ./public/css/tailwind.input.css -o ./public/css/tailwind.css --watch",
     "seed:librarian": "node seed/seedLibrarian.js",
+    "test:smoke": "node scripts/smoke-assistant.js && node scripts/smoke-notifications.js",
     "seed:sample": "node seed/sampleData.js --load",
     "seed:sample:clear": "node seed/sampleData.js --clear"
   },
@@ -33,7 +34,8 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.6.0",
-    "morgan": "^1.10.0"
+    "morgan": "^1.10.0",
+    "nodemailer": "^6.9.14"
   },
   "devDependencies": {
     "nodemon": "^3.1.4",
