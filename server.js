@@ -72,7 +72,16 @@ app.use('/api/reservations', require('./routes/reservationRoutes'));
 app.use('/api/reports', require('./routes/reportRoutes'));
 app.use('/api/settings', require('./routes/settingRoutes'));
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
-app.use('/api/import', require('./routes/importRoutes'));
+
+// Import routes with extended timeout for file uploads
+const importRoutes = require('./routes/importRoutes');
+app.use('/api/import', (req, res, next) => {
+  // Extend timeout for import operations (5 minutes)
+  req.setTimeout(300000);
+  res.setTimeout(300000);
+  next();
+}, importRoutes);
+
 app.use('/api/activity', require('./routes/activityRoutes'));
 app.use('/api/clearance', require('./routes/clearanceRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
