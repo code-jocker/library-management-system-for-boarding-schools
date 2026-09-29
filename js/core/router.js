@@ -22,11 +22,13 @@ const routes = [
   { path: '/return', view: 'views/returnBook.js', titleKey: 'nav.return', crumb: ['nav.return'] },
   { path: '/transactions', view: 'views/transactions.js', titleKey: 'nav.transactions', crumb: ['nav.transactions'] },
   { path: '/overdue', view: 'views/overdue.js', titleKey: 'nav.overdue', crumb: ['nav.overdue'] },
+  { path: '/reminders', view: 'views/reminders.js', titleKey: 'nav.reminders', crumb: ['nav.reminders'] },
   { path: '/fines', view: 'views/fines.js', titleKey: 'nav.fines', crumb: ['nav.fines'] },
   { path: '/reservations', view: 'views/reservations.js', titleKey: 'nav.reservations', crumb: ['nav.reservations'] },
   { path: '/reports', view: 'views/reports.js', titleKey: 'nav.reports', crumb: ['nav.reports'] },
   { path: '/clearance', view: 'views/clearance.js', titleKey: 'nav.clearance', crumb: ['nav.clearance'] },
   { path: '/settings', view: 'views/settings.js', titleKey: 'nav.settings', crumb: ['nav.settings'] },
+  { path: '/assistant', view: 'views/assistant.js', titleKey: 'nav.assistant', crumb: ['nav.assistant'] },
   { path: '/profile', view: 'views/profile.js', titleKey: 'nav.profile', crumb: ['nav.profile'] },
   { path: '/404', view: 'views/notFound.js', titleKey: 'nav.notFound', public: true, layout: 'auth' }
 ];

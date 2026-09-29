@@ -10,8 +10,8 @@ import { getToken } from './auth.js';
 import { getState, set } from './store.js';
 import { t } from './i18n.js';
 import * as db from './db.js';
+import { API_BASE } from './api.js';
 
-const API_BASE = '/api';
 const SYNC_INTERVAL_MS = 30000; // periodic background sync attempt
 let syncing = false;
 let started = false;

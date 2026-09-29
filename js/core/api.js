@@ -11,15 +11,22 @@ import { mirrorResponse, queueDraft, isOffline, readFromMirror } from './offline
 // Defaults to '/api' for same-origin (when served by Express)
 // For Firebase hosting, set to your Render backend URL (e.g., 'https://your-api.onrender.com/api')
 const BASE = (typeof window !== 'undefined' && window.LMS_API_BASE) || '/api';
+// Exported so core/offline.js talks to the same host. When the SPA is served
+// separately from the API (LMS_API_BASE points at Render), a hardcoded '/api'
+// would send every prefetch and every queued draft to the wrong origin.
+export const API_BASE = BASE;
 const DEFAULT_TIMEOUT = 20000;
 
 // In-memory cache for rarely-changing data (settings, categories, lists).
 const cache = new Map();
 
-// Writes to these paths are never queued as offline drafts (auth is meaningless
-// to replay later; it must succeed live).
+// Writes to these paths are never queued as offline drafts.
+//  - /auth: a token cannot be replayed later, it must succeed live.
+//  - /assistant: a question is a read in disguise; replaying it later would
+//    store it as a pending write and re-ask it on reconnect.
+//  - /notifications: a reminder must not be sent twice.
 function canQueue(path) {
-  return !path.startsWith('/auth');
+  return !path.startsWith('/auth') && !path.startsWith('/assistant') && !path.startsWith('/notifications');
 }
 
 // A fetch that failed for connectivity reasons (no HTTP status, not our timeout).

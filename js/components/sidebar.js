@@ -14,11 +14,13 @@ const NAV = [
   { path: '/return', icon: 'log-out', key: 'nav.return' },
   { path: '/transactions', icon: 'list', key: 'nav.transactions' },
   { path: '/overdue', icon: 'alert-triangle', key: 'nav.overdue' },
+  { path: '/reminders', icon: 'send', key: 'nav.reminders' },
   { path: '/fines', icon: 'badge-dollar-sign', key: 'nav.fines' },
   { path: '/reservations', icon: 'bookmark', key: 'nav.reservations' },
   { divider: true },
   { path: '/reports', icon: 'bar-chart-3', key: 'nav.reports' },
   { path: '/clearance', icon: 'file-check', key: 'nav.clearance' },
+  { path: '/assistant', icon: 'sparkles', key: 'nav.assistant' },
   { path: '/settings', icon: 'settings', key: 'nav.settings' }
 ];
 

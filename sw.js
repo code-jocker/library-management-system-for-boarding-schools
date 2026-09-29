@@ -6,7 +6,7 @@
 //  - Network-first for /api GETs, falling back to the last cached response.
 // Writes (POST/PUT/DELETE) are handled by the app's IndexedDB outbox, not here.
 
-const VERSION = 'v1.0.1';
+const VERSION = 'v1.1.0';
 const SHELL_CACHE = `lms-shell-${VERSION}`;
 const RUNTIME_CACHE = `lms-runtime-${VERSION}`;
 
@@ -73,6 +73,8 @@ const PRECACHE_URLS = [
   '/js/views/notFound.js',
   '/js/views/overdue.js',
   '/js/views/profile.js',
+  '/js/views/reminders.js',
+  '/js/views/assistant.js',
   '/js/views/reports.js',
   '/js/views/reservations.js',
   '/js/views/returnBook.js',
