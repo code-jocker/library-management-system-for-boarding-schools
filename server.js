@@ -70,6 +70,8 @@ app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 app.use('/api/import', require('./routes/importRoutes'));
 app.use('/api/activity', require('./routes/activityRoutes'));
 app.use('/api/clearance', require('./routes/clearanceRoutes'));
+app.use('/api/notifications', require('./routes/notificationRoutes'));
+app.use('/api/assistant', require('./routes/assistantRoutes'));
 
 // Health check.
 app.get('/api/health', (req, res) => res.json({ success: true, data: { status: 'ok', time: new Date().toISOString() } }));
