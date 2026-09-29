@@ -69,6 +69,21 @@
     window.LMS_API_BASE = 'https://library-management-system-for-boarding.onrender.com/api';
   </script>
 
+  <!-- Install prompt: registered inline because app.js is a deferred module and
+       can run after the browser has already fired beforeinstallprompt. -->
+  <script>
+    window.__installPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      window.__installPrompt = e;
+      window.dispatchEvent(new CustomEvent('lms:installable'));
+    });
+    window.addEventListener('appinstalled', () => {
+      window.__installPrompt = null;
+      window.dispatchEvent(new CustomEvent('lms:installed'));
+    });
+  </script>
+
   <script type="module" src="/js/app.js"></script>
 </body>
 </html>

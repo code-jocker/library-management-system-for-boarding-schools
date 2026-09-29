@@ -50,6 +50,9 @@ class CDP {
         const d = msg.params.exceptionDetails;
         this.errors.push('exception: ' + (d.exception?.description || d.text));
       }
+      if (msg.method === 'Network.responseReceived' && msg.params.response.status >= 400) {
+        this.errors.push(`http ${msg.params.response.status}: ${msg.params.response.url}`);
+      }
       if (msg.method === 'Log.entryAdded' && msg.params.entry.level === 'error') {
         this.errors.push('console: ' + msg.params.entry.text);
       }
@@ -89,6 +92,17 @@ class CDP {
 // The stub runs before any app code, exactly like the app's own entry point.
 const STUB = () => {
   window.__apiCalls = [];
+  // Pin the API base to this same origin so every request is intercepted below.
+  // Otherwise the app calls the real Render backend from localhost and the run
+  // fills up with CORS failures that say nothing about the code under test.
+  // The inline script in index.html is non-strict, so a getter-only property
+  // makes its assignment a silent no-op.
+  Object.defineProperty(window, 'LMS_API_BASE', {
+    get: () => location.origin + '/api',
+    set: () => {},
+    configurable: true
+  });
+
   localStorage.setItem('lms.token', 'test-token');
   localStorage.setItem('lms.user', JSON.stringify({
     _id: 'u1', username: 'umutoni.jeannette', fullName: 'Umutoni Jeannette',
@@ -121,6 +135,11 @@ const STUB = () => {
       payload: { books: [{ _id: 'b1', title: 'Harry Potter and the Goblet of Fire' }] } } }]
   ];
 
+  // Endpoints the offline mirror warms in the background. They are not part of
+  // any view under test, so answer with empty lists rather than letting them
+  // fall through to the static server and 404.
+  const mirrorRoutes = ['/api/books', '/api/members', '/api/categories', '/api/transactions'];
+
   const json = (body) => Promise.resolve(new Response(JSON.stringify(body), {
     status: 200, headers: { 'Content-Type': 'application/json' }
   }));
@@ -141,6 +160,9 @@ const STUB = () => {
     if (url.includes('/api/assistant/chat')) {
       return json({ success: true, data: { intent: 'policy', answer: 'Overdue books are charged RF100 per book per day.',
         suggestions: ['My fines', 'Find a book'] } });
+    }
+    for (const frag of mirrorRoutes) {
+      if (url.includes(frag)) return json({ success: true, data: [] });
     }
     return realFetch.apply(this, arguments);
   };
@@ -184,6 +206,19 @@ const STUB = () => {
     await cdp.send('Page.enable');
     await cdp.send('Runtime.enable');
     await cdp.send('Log.enable');
+    // A stale HTTP cache or an installed service worker can serve an old app
+    // shell, which makes the view under test never boot. Bypass both.
+    await cdp.send('Network.enable');
+    await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
+    await cdp.send('Network.clearBrowserCache');
+    await cdp.send('Network.setBypassServiceWorker', { bypass: true });
+    // This environment has no outbound internet, so the blocking <script> tags
+    // for the icon/chart CDNs never resolve and the HTML parser stalls part way
+    // through <head>, leaving the document half-parsed. Fail them fast instead.
+    // The app guards every lucide/chart call, so nothing depends on them here.
+    await cdp.send('Network.setBlockedURLs', {
+      urls: ['*unpkg.com*', '*cdn.jsdelivr.net*', '*fonts.googleapis.com*', '*fonts.gstatic.com*']
+    });
     const stubSource = `(${STUB.toString()})();`;
     await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: stubSource });
 
@@ -247,6 +282,87 @@ const STUB = () => {
       check('notifications endpoint was called', state.calls.some((c) => c.includes('/api/notifications/overdue')), state.calls);
       check('channels endpoint was called', state.calls.some((c) => c.includes('/api/notifications/channels')), state.calls);
       check('sidebar has Reminders', state.nav.some((n) => n.includes('Reminders')), state.nav);
+    }
+
+    if (ROUTE.includes('install')) {
+      // The banner only shows once the browser offers a prompt, which headless
+      // Chrome will not do on its own. Fire a synthetic event carrying the same
+      // shape so the real code path runs.
+      const shown = await cdp.eval(`
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        // Wait for the app shell to mount, otherwise the synthetic event can be
+        // dispatched before app.js has run and the banner is simply missed.
+        for (let i = 0; i < 40 && !document.querySelector('h1'); i++) await sleep(250);
+        const evt = new Event('beforeinstallprompt', { cancelable: true });
+        evt.prompt = () => { window.__promptCalled = true; };
+        Object.defineProperty(evt, 'userChoice', { value: Promise.resolve({ outcome: 'accepted' }) });
+        window.dispatchEvent(evt);
+        // The banner appears on a 1.5s timer, so poll rather than guess.
+        for (let i = 0; i < 30 && !document.getElementById('install-banner'); i++) await sleep(250);
+        const banner = document.getElementById('install-banner');
+        return {
+          stored: window.__installPrompt === evt,
+          exists: !!banner,
+          title: banner ? (banner.querySelector('h2') || {}).textContent : null,
+          body: banner ? (banner.querySelector('p') || {}).textContent : null,
+          hasAccept: !!(banner && banner.querySelector('#install-accept')),
+          hasLater: !!(banner && banner.querySelector('#install-later')),
+          iconLoaded: !!(banner && banner.querySelector('img[src="/images/icon.png"]')),
+          position: banner ? banner.style.cssText : null
+        };
+      `);
+      console.log('  banner:', JSON.stringify(shown));
+      check('the beforeinstallprompt event was stashed', shown.stored, shown);
+      check('the banner appeared', shown.exists, shown);
+      check('banner shows the translated title', shown.title === 'Install the Library app', shown.title);
+      check('banner shows the body copy', typeof shown.body === 'string' && shown.body.length > 20, shown.body);
+      check('Install button is present when promptable', shown.hasAccept, shown);
+      check('dismiss button is present', shown.hasLater, shown);
+      check('app icon is shown', shown.iconLoaded, shown);
+      check('banner is positioned at the bottom centre', /bottom/.test(shown.position || ''), shown.position);
+
+      // Clicking Install must call prompt() and record the install.
+      const accepted = await cdp.eval(`
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        const btn = document.getElementById('install-banner') && document.getElementById('install-banner').querySelector('#install-accept');
+        if (btn) btn.click();
+        await sleep(600);
+        return {
+          promptCalled: window.__promptCalled === true,
+          gone: !document.getElementById('install-banner'),
+          done: localStorage.getItem('lms.install.done')
+        };
+      `);
+      console.log('  accept:', JSON.stringify(accepted));
+      check('clicking Install called prompt()', accepted.promptCalled, accepted);
+      check('banner closed after accepting', accepted.gone, accepted);
+      check('install recorded so it never nags again', accepted.done === '1', accepted);
+
+      // A dismissed banner must be suppressed on the next visit.
+      const redisplay = await cdp.eval(`
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        localStorage.removeItem('lms.install.done');
+        localStorage.setItem('lms.install.dismissedAt', String(Date.now()));
+        window.dispatchEvent(new CustomEvent('lms:installable'));
+        for (let i = 0; i < 24 && document.getElementById('install-banner'); i++) await sleep(250);
+        return { shown: !!document.getElementById('install-banner') };
+      `);
+      check('a recently dismissed banner is not shown again', redisplay.shown === false, redisplay);
+
+      // ...but it comes back after the 14-day window.
+      const after14 = await cdp.eval(`
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        localStorage.setItem('lms.install.dismissedAt', String(Date.now() - 15 * 86400000));
+        window.dispatchEvent(new CustomEvent('lms:installable'));
+        for (let i = 0; i < 24 && !document.getElementById('install-banner'); i++) await sleep(250);
+        const b = document.getElementById('install-banner');
+        const onlyDismiss = b && !b.querySelector('#install-accept');
+        if (b) b.remove();
+        return { shownAgain: !!b, onlyDismissButton: !!onlyDismiss };
+      `);
+      console.log('  after 14 days:', JSON.stringify(after14));
+      check('banner returns after 14 days', after14.shownAgain === true, after14);
+      check('non-promptable browser shows only a dismiss button', after14.onlyDismissButton === true, after14);
     }
 
     const realErrors = cdp.errors.filter((e) => !/sw disabled in check|Failed to load resource.*(unpkg|jsdelivr|fonts)/i.test(e));

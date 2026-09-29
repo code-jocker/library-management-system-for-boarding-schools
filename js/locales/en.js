@@ -488,6 +488,17 @@ export default {
     bulkSent: '{n} email(s) sent.',
     empty: 'Nobody is overdue and there are no unpaid fines. Excellent!'
   },
+  install: {
+    title: 'Install the Library app',
+    body: 'Add it to your home screen so it opens like a normal app and keeps working when the internet drops.',
+    accept: 'Install',
+    later: 'Not now',
+    gotIt: 'Got it',
+    iosHint: 'Add this app to your home screen so it opens full screen and works offline.',
+    iosStep1: 'Tap the Share button in Safari.',
+    iosStep2: 'Choose "Add to Home Screen", then tap Add.',
+    failed: 'The install prompt could not be opened. Use your browser menu instead.'
+  },
   notFound: {
     title: 'Page not found',
     message: 'The page you are looking for does not exist or has been moved.',

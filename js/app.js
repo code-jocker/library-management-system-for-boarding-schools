@@ -8,6 +8,7 @@ import { startRouter, navigate } from './core/router.js';
 import { t, applyTranslations } from './core/i18n.js';
 import { toast } from './components/toast.js';
 import { initOfflineSync, prefetchMirror } from './core/offline.js';
+import { initInstallPrompt } from './components/installPrompt.js';
 
 // Apply saved theme immediately to avoid a flash.
 document.documentElement.classList.toggle('dark', getState().theme === 'dark');
@@ -58,6 +59,8 @@ async function bootstrap() {
   registerServiceWorker();
   // Offline draft queue + background sync.
   initOfflineSync();
+  // "Install this app" banner on a user's first visit.
+  initInstallPrompt();
 
   // Refresh the overdue count every 2 minutes while on the app.
   setInterval(() => { if (getToken()) refreshOverdueCount(); }, 120000);

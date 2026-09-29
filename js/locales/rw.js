@@ -489,6 +489,17 @@ export default {
     bulkSent: 'Imeyeli {n} yoherejwe.',
     empty: 'Nta wundi warengeje igihe kandi nta mande atishyuwe. Byose biracyo neza!'
   },
+  install: {
+    title: 'Shyira porogaramu y\'ibitabo',
+    body: 'Yishyire kuri ecran y\'umwanzwe wese kugira ngo igisenge gikuru gafunguke nk\'application igatanga no kora no interineti.',
+    accept: 'Shyira',
+    later: 'Birakunze',
+    gotIt: 'Byumviye',
+    iosHint: 'Yishyire porogaramu kuri ecran y\'umwanzwe wese kugira ngo igisenge gikuru gafunguke no kora no interineti.',
+    iosStep1: 'Ganda buto ya Share muri Safari.',
+    iosStep2: 'Hitamo "Add to Home Screen", hanyuma wanda kanda Add.',
+    failed: 'Ntitababariye gusura. Koresha menyu ya browser wawe.'
+  },
   notFound: {
     title: 'Paje ntibonetse',
     message: 'Paje ushaka ntibaho cyangwa yimuwe.',

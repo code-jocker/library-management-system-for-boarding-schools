@@ -142,6 +142,42 @@ function checkLocales(enDict, rwDict) {
   }
   if (!failures) pass('offline write-queue excludes /auth, /assistant and /notifications');
 
+  // ---- 9. Tailwind classes used in JS must exist in the purged build ----
+  // css/tailwind.css is purged to the classes the app actually uses, and this
+  // branch has no tailwind.config.js to rebuild it, so a class invented in a
+  // component silently renders unstyled. The install banner is built by hand
+  // rather than reusing an existing view's class strings, so it is the risk.
+  const compiledCss = fs.readFileSync(path.join(ROOT, 'css/tailwind.css'), 'utf8');
+  const bannerSrc = fs.readFileSync(path.join(ROOT, 'js/components/installPrompt.js'), 'utf8');
+  const classAttr = [...bannerSrc.matchAll(/className\s*=\s*'([^']+)'|class="([^"]+)"/g)]
+    .map((m) => m[1] || m[2])
+    .join(' ')
+    // Keep only the plain class names, not the ${...} template holes.
+    .replace(/\$\{[^}]*\}/g, ' ')
+    .split(/\s+/)
+    .filter((c) => c && !c.includes('$'));
+  // CSS escapes ':' and brackets in a selector (.z-\[9000\], .dark\:bg-slate-800).
+  const cssSelector = (name) => '.' + name.replace(/([:[\]/.\%])/g, '\\$1');
+  const absent = [...new Set(classAttr)].filter((c) => !compiledCss.includes(cssSelector(c)));
+  if (absent.length) fail(`installPrompt.js uses classes missing from css/tailwind.css: ${absent.join(', ')}`);
+  else pass(`all ${new Set(classAttr).size} install-banner classes exist in the compiled CSS`);
+
+  // ---- 10. The install event must be captured before the deferred module ----
+  const installIndex = html.indexOf('beforeinstallprompt');
+  const moduleIndex = html.indexOf('<script type="module"');
+  if (installIndex === -1) fail('index.html does not listen for beforeinstallprompt');
+  else if (moduleIndex !== -1 && installIndex > moduleIndex) {
+    fail('the beforeinstallprompt listener is registered after the module script and will be missed');
+  } else {
+    pass('beforeinstallprompt is captured before the module script runs');
+  }
+
+  // ---- 11. The install banner must be initialised ----
+  const appSrc = fs.readFileSync(path.join(ROOT, 'js/app.js'), 'utf8');
+  if (!appSrc.includes('initInstallPrompt()')) fail('app.js never calls initInstallPrompt()');
+  else if (!/import\s*\{[^}]*initInstallPrompt[^}]*\}/.test(appSrc)) fail('app.js does not import initInstallPrompt');
+  else pass('app.js initialises the install prompt');
+
   console.log(failures ? `\n${failures} FAILURES` : '\nFrontend checks passed');
   process.exit(failures ? 1 : 0);
 }
