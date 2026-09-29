@@ -20,6 +20,12 @@ async function connectDB() {
       bufferCommands: false
     });
     console.log(`[db] MongoDB connected: ${conn.connection.host}/${conn.connection.name}`);
+
+    // In production autoIndex is off (avoids startup blocking), so build any
+    // missing indexes explicitly here — e.g. Book text index for the search box.
+    const models = require('./models');
+    await Promise.all(models.map((m) => m.createIndexes().catch((e) => console.warn(`[db] index error on ${m.modelName}:`, e.message))));
+
     return conn;
   } catch (err) {
     console.error('[db] MongoDB connection failed:', err.message);
