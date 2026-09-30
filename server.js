@@ -15,9 +15,13 @@ const notFound = require('./middleware/notFound');
 const errorHandler = require('./middleware/errorHandler');
 const { apiLimiter } = require('./middleware/rateLimiter');
 const User = require('./models/User');
+const Setting = require('./models/Setting');
 const push = require('./utils/pushNotifications');
 const scheduler = require('./utils/scheduler');
 const eventBus = require('./utils/eventBus');
+const offlineStorage = require('./utils/offlineStorage');
+const { getSyncEngine } = require('./utils/syncEngine');
+const { getSetupStatus } = require('./utils/setupStatus');
 
 const app = express();
 
@@ -87,8 +91,20 @@ app.use('/api/clearance', require('./routes/clearanceRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/assistant', require('./routes/assistantRoutes'));
 
-// Health check.
-app.get('/api/health', (req, res) => res.json({ success: true, data: { status: 'ok', time: new Date().toISOString() } }));
+// Setup routes (no auth required - for initialization and status)
+app.use('/api/setup', require('./routes/setupRoutes'));
+
+// Health check endpoint (comprehensive)
+app.get('/api/health', async (req, res) => {
+  try {
+    const setupStatus = getSetupStatus();
+    const result = await setupStatus.runAll();
+    const statusCode = result.healthy ? 200 : 503;
+    res.status(statusCode).json({ success: result.healthy, data: result });
+  } catch (e) {
+    res.status(500).json({ success: false, data: { status: 'ok', time: new Date().toISOString(), error: e.message } });
+  }
+});
 
 // NOTE: there used to be an unauthenticated `app.all('/api/_seed')` endpoint
 // here. It deleted every non-librarian user and returned the librarian password
@@ -98,6 +114,26 @@ app.get('/api/health', (req, res) => res.json({ success: true, data: { status: '
 
 // API 404 (JSON).
 app.use('/api', notFound);
+
+// Serve web setup page (no auth required)
+app.get('/setup', (req, res) => {
+  res.sendFile(require('path').join(__dirname, 'public', 'setup', 'index.html'));
+});
+
+// Redirect root to setup if not configured
+app.get('/', async (req, res) => {
+  try {
+    const settings = await Setting.findById(Setting.SETTING_ID).lean().catch(() => null);
+    const librarian = await User.findOne({ role: 'librarian' }).lean();
+    if (!librarian || !settings) {
+      return res.redirect('/setup');
+    }
+    // If configured, serve the main app (placeholder for now)
+    res.sendFile(require('path').join(__dirname, 'public', 'setup', 'index.html'));
+  } catch {
+    res.redirect('/setup');
+  }
+});
 
 // Global error handler last.
 app.use(errorHandler);

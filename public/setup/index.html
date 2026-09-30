@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Library System Setup</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <div class="max-w-4xl mx-auto py-8 px-4">
+    <header class="text-center mb-8">
+      <h1 class="text-4xl font-bold text-blue-800">Library Management System</h1>
+      <p class="text-gray-600 mt-2">Setup & Configuration</p>
+    </header>
+
+    <div id="status" class="bg-white rounded-lg shadow p-6 mb-6">
+      <h2 class="text-xl font-semibold mb-4">System Status</h2>
+      <div id="statusContent">Loading...</div>
+    </div>
+
+    <div id="setup" class="bg-white rounded-lg shadow p-6 mb-6" style="display:none">
+      <h2 class="text-xl font-semibold mb-4">Initialize System</h2>
+      <form id="initForm">
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700">School Name</label>
+          <input type="text" id="schoolName" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2" placeholder="Green Hills School">
+        </div>
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700">Librarian Password (min 12 chars)</label>
+          <input type="password" id="librarianPassword" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2" required minlength="12">
+        </div>
+        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Initialize</button>
+      </form>
+    </div>
+
+    <div id="sync" class="bg-white rounded-lg shadow p-6 mb-6" style="display:none">
+      <h2 class="text-xl font-semibold mb-4">Sync Status</h2>
+      <div id="syncContent"></div>
+      <button id="syncBtn" class="mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Sync Now</button>
+    </div>
+
+    <div id="conflicts" class="bg-white rounded-lg shadow p-6" style="display:none">
+      <h2 class="text-xl font-semibold mb-4">Pending Conflicts</h2>
+      <div id="conflictsContent"></div>
+    </div>
+
+    <footer class="text-center text-gray-500 text-sm mt-8">
+      Library System v<span id="version">?</span>
+    </footer>
+  </div>
+
+  <script>
+    const API = window.LMS_API_BASE || '/api';
+
+    async function loadStatus() {
+      try {
+        const res = await fetch(`${API}/setup/status`);
+        const data = await res.json();
+        document.getElementById('version').textContent = data.data?.offline?.version || '?';
+        
+        const statusContent = document.getElementById('statusContent');
+        statusContent.innerHTML = `
+          <div class="grid grid-cols-2 gap-4">
+            <div><span class="font-semibold">Configured:</span> ${data.data?.configured ? 'Yes' : 'No'}</div>
+            <div><span class="font-semibold">DB State:</span> ${data.data?.database?.state || 'unknown'}</div>
+            <div><span class="font-semibold">Online:</span> ${data.data?.sync?.online ? 'Yes' : 'No'}</div>
+            <div><span class="font-semibold">Mode:</span> ${data.data?.offline?.mode || 'unknown'}</div>
+            <div><span class="font-semibold">Users:</span> ${data.data?.counts?.users || 0}</div>
+            <div><span class="font-semibold">Members:</span> ${data.data?.counts?.members || 0}</div>
+            <div><span class="font-semibold">Books:</span> ${data.data?.counts?.books || 0}</div>
+            <div><span class="font-semibold">Pending Drafts:</span> ${data.data?.sync?.pendingDrafts || 0}</div>
+          </div>
+        `;
+
+        if (!data.data?.configured) {
+          document.getElementById('setup').style.display = 'block';
+        }
+        document.getElementById('sync').style.display = 'block';
+        document.getElementById('conflicts').style.display = 'block';
+        loadSync();
+        loadConflicts();
+      } catch (e) {
+        document.getElementById('statusContent').textContent = 'Failed to load status: ' + e.message;
+      }
+    }
+
+    async function loadSync() {
+      try {
+        const res = await fetch(`${API}/setup/status`);
+        const data = await res.json();
+        const s = data.data?.sync || {};
+        document.getElementById('syncContent').innerHTML = `
+          <div>Online: ${s.online ? 'Yes' : 'No'}</div>
+          <div>Pending Drafts: ${s.pendingDrafts || 0}</div>
+          <div>Pending Queue: ${s.pendingQueue || 0}</div>
+          <div>Failed Queue: ${s.failedQueue || 0}</div>
+        `;
+      } catch (e) {
+        document.getElementById('syncContent').textContent = 'Failed: ' + e.message;
+      }
+    }
+
+    async function loadConflicts() {
+      try {
+        const res = await fetch(`${API}/setup/status`);
+        const data = await res.json();
+        const conflicts = data.data?.sync?.failedQueue || 0;
+        document.getElementById('conflictsContent').textContent = conflicts + ' pending conflict(s)';
+      } catch (e) {
+        document.getElementById('conflictsContent').textContent = 'Failed: ' + e.message;
+      }
+    }
+
+    document.getElementById('initForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const schoolName = document.getElementById('schoolName').value;
+      const password = document.getElementById('librarianPassword').value;
+      
+      try {
+        const res = await fetch(`${API}/setup/initialize`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ librarianPassword: password, schoolName })
+        });
+        const data = await res.json();
+        alert(data.message || 'Initialization complete');
+        loadStatus();
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    });
+
+    document.getElementById('syncBtn').addEventListener('click', async () => {
+      try {
+        const res = await fetch(`${API}/setup/sync`, { method: 'POST' });
+        const data = await res.json();
+        alert(data.message || 'Sync complete');
+        loadSync();
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    });
+
+    loadStatus();
+  </script>
+</body>
+</html>
