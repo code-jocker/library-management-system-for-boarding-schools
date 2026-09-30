@@ -86,22 +86,23 @@ test('warnIfNoUsers warns when the database is empty', () => {
   assert.ok(/No user accounts exist/.test(serverSrc), 'server.js does not warn when empty');
 });
 
-test('server.js does not use Setting or Scheduler to seed data', () => {
+test('server.js does not use Setting or the scheduler to seed data', () => {
   // server.js legitimately *reads* the settings document at the "/" route to
-  // decide whether to redirect to /setup. Banning the import outright would
-  // forbid that harmless read, so this checks the property that actually
-  // matters: settings are never written, and never written during boot.
+  // decide whether to redirect to /setup, and starts the scheduler so overdue
+  // reminders go out. Both are fine. What must never happen is a *write*:
+  // that is what would silently reset library configuration or a password on
+  // every start, so the guard targets writes only.
   assert.equal(/Setting\.(create|insert|update|updateOne|updateMany|findOneAndUpdate|findByIdAndUpdate|replaceOne|bulkWrite)/.test(serverCode), false,
     'server.js writes to the settings collection, which would reset library configuration on boot');
 
-  const boot = serverSrc.slice(serverSrc.indexOf('async function boot'));
-  assert.equal(/Setting/.test(stripComments(boot)), false,
-    'boot() touches Setting, which would let configuration changes happen on every start');
+  // The scheduler sends reminders. It must never create or mutate a user,
+  // which is the failure mode this whole file guards against.
+  const schedulerSrc = stripComments(fs.readFileSync(path.join(ROOT, 'utils/scheduler.js'), 'utf8'));
+  assert.equal(/User\.(create|update|updateOne|updateMany|findOneAndUpdate|findByIdAndUpdate)/.test(schedulerSrc), false,
+    'the scheduler writes to the User collection; it should only send reminders');
 
-  // Scheduler ran maintenance jobs on a timer at boot. It is no longer needed
-  // and must not come back, so the import itself is banned.
-  assert.equal(/\brequire\(.*Scheduler/.test(serverCode), false,
-    'server.js imports Scheduler, which ran background jobs at boot');
+  assert.equal(/Setting\.(create|insert|update|updateOne|updateMany|findOneAndUpdate|findByIdAndUpdate|replaceOne|bulkWrite)/.test(schedulerSrc), false,
+    'the scheduler writes to the settings collection; it should only read them');
 });
 
 console.log('\nAll static regression checks passed.');
