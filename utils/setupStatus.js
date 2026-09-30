@@ -7,8 +7,8 @@
 // - CLI setup script
 
 const mongoose = require('mongoose');
-const offlineStorage = require('./utils/offlineStorage');
-const { getSyncEngine } = require('./utils/syncEngine');
+const offlineStorage = require('./offlineStorage');
+const { getSyncEngine } = require('./syncEngine');
 
 class SetupStatus {
   constructor() {

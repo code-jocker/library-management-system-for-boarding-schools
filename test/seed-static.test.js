@@ -86,9 +86,22 @@ test('warnIfNoUsers warns when the database is empty', () => {
   assert.ok(/No user accounts exist/.test(serverSrc), 'server.js does not warn when empty');
 });
 
-test('server.js does not import Setting or Scheduler for seeding', () => {
-  const imports = serverSrc.slice(0, serverSrc.indexOf('const app'));
-  assert.equal(/Setting/.test(imports), false, 'server.js imports Setting, which was only used by autoSeed');
+test('server.js does not use Setting or Scheduler to seed data', () => {
+  // server.js legitimately *reads* the settings document at the "/" route to
+  // decide whether to redirect to /setup. Banning the import outright would
+  // forbid that harmless read, so this checks the property that actually
+  // matters: settings are never written, and never written during boot.
+  assert.equal(/Setting\.(create|insert|update|updateOne|updateMany|findOneAndUpdate|findByIdAndUpdate|replaceOne|bulkWrite)/.test(serverCode), false,
+    'server.js writes to the settings collection, which would reset library configuration on boot');
+
+  const boot = serverSrc.slice(serverSrc.indexOf('async function boot'));
+  assert.equal(/Setting/.test(stripComments(boot)), false,
+    'boot() touches Setting, which would let configuration changes happen on every start');
+
+  // Scheduler ran maintenance jobs on a timer at boot. It is no longer needed
+  // and must not come back, so the import itself is banned.
+  assert.equal(/\brequire\(.*Scheduler/.test(serverCode), false,
+    'server.js imports Scheduler, which ran background jobs at boot');
 });
 
 console.log('\nAll static regression checks passed.');

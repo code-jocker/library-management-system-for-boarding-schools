@@ -11,6 +11,7 @@
     "watch:css": "tailwindcss -i ./public/css/tailwind.input.css -o ./public/css/tailwind.css --watch",
     "seed:librarian": "node seed/seedLibrarian.js",
     "test:smoke": "node scripts/smoke-assistant.js && node scripts/smoke-notifications.js",
+    "test:isbn": "node scripts/test-isbn-lookup.js",
     "seed:sample": "node seed/sampleData.js --load",
     "seed:sample:clear": "node seed/sampleData.js --clear"
   },

@@ -5,6 +5,7 @@ const Transaction = require('../models/Transaction');
 const Reservation = require('../models/Reservation');
 const asyncHandler = require('../utils/asyncHandler');
 const { logActivity } = require('../utils/activityLogger');
+const { normalizeIsbn } = require('../utils/openlibrary');
 
 // Client-compressed images must stay small; ~100 KB JPEG -> ~140 KB base64.
 const MAX_IMAGE_CHARS = 400000;
@@ -73,6 +74,33 @@ const lookup = asyncHandler(async (req, res) => {
   return res.json({ success: true, data: { book } });
 });
 
+// GET /api/books/isbn-lookup?isbn=
+// Prefills the add-book form from Open Library. Writes nothing: the librarian
+// reviews the fields and saves through POST /api/books as normal, so validation
+// and activity logging are unchanged.
+const isbnLookup = asyncHandler(async (req, res) => {
+  const ol = require('../utils/openlibrary');
+  const result = await ol.lookupByIsbn(req.query.isbn);
+
+  if (!result.ok) {
+    // 200 with success:false — a lookup miss is a normal outcome, and the
+    // librarian just types the book in by hand. Never surface it as an error.
+    return res.json({ success: false, message: result.error, data: null });
+  }
+
+  // Book.isbn is unique, so a save of a duplicate would throw E11000 from the
+  // driver. Warn first instead of letting the librarian hit that.
+  const existing = await Book.findOne({ isbn: result.isbn })
+    .select('title author isbn totalCopies availableCopies shelfLocation')
+    .lean();
+
+  res.json({
+    success: true,
+    data: { book: result.data, isbn: result.isbn, cached: result.cached, alreadyInLibrary: existing || null },
+    message: result.cached ? 'Loaded from cache' : 'Fetched from Open Library'
+  });
+});
+
 // GET /api/books/:id
 const getOne = asyncHandler(async (req, res) => {
   const book = await Book.findById(req.params.id).populate('category', 'name color').lean();
@@ -99,6 +127,8 @@ const create = asyncHandler(async (req, res) => {
   const total = Number(b.totalCopies) || 0;
   const book = await Book.create({
     ...b,
+    // Digits-only, so a later desk scan of the same barcode matches this row.
+    isbn: normalizeIsbn(b.isbn),
     totalCopies: total,
     availableCopies: total
   });
@@ -133,6 +163,7 @@ const update = asyncHandler(async (req, res) => {
 
   const editable = ['title', 'author', 'isbn', 'category', 'publisher', 'year', 'edition', 'shelfLocation', 'language', 'cover', 'description', 'replacementValue'];
   for (const f of editable) if (b[f] !== undefined) book[f] = b[f];
+  book.isbn = normalizeIsbn(book.isbn);
 
   await book.save();
   await logActivity({ req, action: 'update', entity: 'book', entityId: book._id, message: `Updated book "${book.title}"` });
@@ -161,4 +192,4 @@ const options = asyncHandler(async (req, res) => {
   res.json({ success: true, data: { languages: languages.filter(Boolean).sort() } });
 });
 
-module.exports = { list, lookup, getOne, create, update, remove, options, MAX_IMAGE_CHARS };
+module.exports = { list, lookup, isbnLookup, getOne, create, update, remove, options, MAX_IMAGE_CHARS };

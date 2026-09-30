@@ -18,6 +18,7 @@ const bookRules = [
 router.get('/', ctrl.list);
 router.get('/meta/options', ctrl.options);
 router.get('/lookup', ctrl.lookup);
+router.get('/isbn-lookup', ctrl.isbnLookup);
 router.get('/:id', ctrl.getOne);
 router.post('/', bookRules, validate, ctrl.create);
 router.put('/:id', bookRules, validate, ctrl.update);
