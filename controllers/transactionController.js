@@ -19,6 +19,23 @@ function addDays(date, days) {
   return d;
 }
 
+// Statuses where the physical book has left the member's hands for good.
+// A lost copy was removed from totalCopies, and a damaged copy was already
+// put back on the shelf, so neither may be returned or renewed again — doing
+// so inflates availableCopies past totalCopies and charges a second fine.
+const CLOSED_STATUSES = ['returned', 'lost', 'damaged'];
+
+function closedStatusMessage(status) {
+  if (status === 'lost') return 'This book was marked lost and is no longer on loan';
+  if (status === 'damaged') return 'This book was marked damaged and already went back to the shelf';
+  return 'This book was already returned';
+}
+
+// True when the loan is still open and may be returned, renewed or written off.
+function isOpenLoan(txn) {
+  return !CLOSED_STATUSES.includes(txn.status);
+}
+
 // Shared eligibility check for issuing a book to a member.
 async function checkIssueEligibility(member, book, settings) {
   const reasons = [];
@@ -141,8 +158,11 @@ const returnBook = asyncHandler(async (req, res) => {
 
   const txn = await Transaction.findById(transactionId).populate('book').populate('member');
   if (!txn) return res.status(404).json({ success: false, message: 'Loan not found' });
-  if (txn.status === 'returned') {
-    return res.status(400).json({ success: false, message: 'This book was already returned' });
+  // Guard every closed status, not just 'returned'. Returning a lost copy would
+  // push availableCopies above totalCopies and bill the member for a book
+  // nobody has.
+  if (!isOpenLoan(txn)) {
+    return res.status(400).json({ success: false, message: closedStatusMessage(txn.status) });
   }
 
   const now = new Date();
@@ -220,7 +240,11 @@ const renew = asyncHandler(async (req, res) => {
   const settings = await Setting.get();
   const txn = await Transaction.findById(transactionId).populate('book').populate('member');
   if (!txn) return res.status(404).json({ success: false, message: 'Loan not found' });
-  if (txn.status === 'returned') return res.status(400).json({ success: false, message: 'This book is already returned' });
+  // A lost or damaged loan is closed: extending its due date would keep
+  // chasing the member for a book that is already written off.
+  if (!isOpenLoan(txn)) {
+    return res.status(400).json({ success: false, message: closedStatusMessage(txn.status) });
+  }
 
   if (txn.renewCount >= 2) {
     return res.status(400).json({ success: false, message: 'Maximum of 2 renewals already used' });
@@ -254,7 +278,11 @@ const markLostOrDamaged = asyncHandler(async (req, res) => {
   const settings = await Setting.get();
   const txn = await Transaction.findById(transactionId).populate('book').populate('member');
   if (!txn) return res.status(404).json({ success: false, message: 'Loan not found' });
-  if (txn.status === 'returned') return res.status(400).json({ success: false, message: 'Book already returned' });
+  // Marking lost decrements totalCopies, and marking damaged returns the copy
+  // to the shelf. Repeating either would double-count the physical stock.
+  if (!isOpenLoan(txn)) {
+    return res.status(400).json({ success: false, message: closedStatusMessage(txn.status) });
+  }
 
   if (kind === 'lost') {
     txn.status = 'lost';
