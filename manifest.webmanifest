@@ -1,5 +1,5 @@
 {
-  "name": "Green Hills Library Management System",
+  "name": "KAGEYO TSS Library Management System",
   "short_name": "Library",
   "description": "Manage books, members, issuing and returns for the boarding school library desk. Works offline.",
   "id": "/",
@@ -10,8 +10,9 @@
   "background_color": "#F8FAFC",
   "theme_color": "#1E3A8A",
   "lang": "en",
-  "categories": ["education", "productivity", "business"],
-  "icons": [
+   "categories": ["education", "productivity", "business"],
+   "gcm_sender_id": "1234567890",
+   "icons": [
     {
       "src": "/images/favicon.svg",
       "sizes": "any",

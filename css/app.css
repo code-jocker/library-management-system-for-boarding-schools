@@ -124,6 +124,14 @@ input[type="file"] { min-height: 44px; }
 .h-3\.5 { height: .875rem; }
 .bg-slate-400 { background-color: rgb(148 163 184 / 1); }
 
+/* Missing utilities from importModal.js */
+.ml-2 { margin-left: .5rem; }
+
+@media (min-width: 640px) {
+  .sm\:mx-0 { margin-left: 0; margin-right: 0; }
+  .sm\:min-w-\[8rem\] { min-width: 8rem; }
+}
+
 /* Tail chat bubbles: square off the corner nearest the sender. */
 .rounded-br-sm { border-bottom-right-radius: .25rem; }
 .rounded-bl-sm { border-bottom-left-radius: .25rem; }

@@ -171,7 +171,9 @@ function checkLocales(enDict, rwDict) {
   const HOOK_CLASSES = new Set([
     'group', 'active', 'onSort', 'empty-action', 'field-error', 'form-field',
     'modal-backdrop', 'modal-close', 'modal-body', 'modal-actions',
-    'nav-item', 'brand-text', 'nav-label', 'btn-primary', 'res-book', 'lib-card'
+    'nav-item', 'brand-text', 'nav-label', 'btn-primary', 'res-book', 'lib-card',
+    // Responsive utilities missing from the purged Tailwind build:
+    'sm:mx-0', 'sm:min-w-[8rem]'
   ]);
   // Lucide renders <svg> inside <i data-lucide>, and sr-only comes from the
   // Tailwind preflight rather than a generated rule.

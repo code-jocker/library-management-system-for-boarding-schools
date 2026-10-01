@@ -82,7 +82,7 @@ export function openImportModal({ kind, templateColumns, onDone }) {
           <p class="text-xs text-slate-400 mb-2">${escapeHtml(t('import.editHint'))}</p>
           <div id="added-note" class="hidden mb-2 text-xs text-primary font-medium"></div>
           <div id="preview-summary" class="mb-3"></div>
-          <div id="preview-table" class="max-h-[24rem] overflow-auto scroll-slim border border-slate-200 dark:border-slate-700 rounded-input"></div>
+           <div id="preview-table" class="max-h-[24rem] overflow-auto scroll-slim border border-slate-200 dark:border-slate-700 rounded-input -mx-1 sm:mx-0"></div>
         </div>
       </div>`,
     actions: [
@@ -102,12 +102,29 @@ export function openImportModal({ kind, templateColumns, onDone }) {
     commitBtn.classList.toggle('cursor-not-allowed', !on);
   }
 
-  // 1. Template download (CSV with sample row).
-  root.querySelector('#dl-template').addEventListener('click', () => {
-    const header = templateColumns.map((c) => c.label).join(',');
-    const sample = templateColumns.map((c) => (c.sample != null ? `"${c.sample}"` : '')).join(',');
-    download(`${kind}-import-template.csv`, `${header}\n${sample}`, 'text/csv;charset=utf-8;');
-  });
+   // 1. Template download (CSV + Excel).
+   root.querySelector('#dl-template').addEventListener('click', () => {
+     const header = templateColumns.map((c) => c.label).join(',');
+     const sample = templateColumns.map((c) => (c.sample != null ? `"${c.sample}"` : '')).join(',');
+     download(`${kind}-import-template.csv`, `${header}\n${sample}`, 'text/csv;charset=utf-8;');
+   });
+
+   // 1b. Excel template download.
+   root.querySelector('#dl-template').insertAdjacentHTML('afterend',
+     `<button id="dl-template-xlsx" type="button" class="ml-2 inline-flex items-center gap-2 px-4 py-2 rounded-input border border-slate-300 dark:border-slate-600 text-sm font-medium hover:bg-white dark:hover:bg-slate-700 min-h-[44px]">
+       <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>Download Excel template
+     </button>`
+   );
+   root.querySelector('#dl-template-xlsx').addEventListener('click', () => {
+     if (!window.XLSX) return toast('Excel library not loaded', 'error');
+     const wsData = [templateColumns.map((c) => c.label), templateColumns.map((c) => c.sample != null ? c.sample : '')];
+     const ws = window.XLSX.utils.aoa_to_sheet(wsData);
+     const wb = window.XLSX.utils.book_new();
+     window.XLSX.utils.book_append_sheet(wb, ws, kind);
+     const wbout = window.XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+     download(`${kind}-import-template.xlsx`, wbout, 'application/octet-stream');
+     if (window.lucide) window.lucide.createIcons();
+   });
 
   // 2. File parse (CSV via PapaParse, XLSX via SheetJS).
   root.querySelector('#file-input').addEventListener('change', async (e) => {
@@ -173,14 +190,14 @@ export function openImportModal({ kind, templateColumns, onDone }) {
 
     const body = parsedRows.map((row, i) => `
       <tr data-row="${i}" class="border-t border-slate-100 dark:border-slate-700/60">
-        <td class="px-2 py-1 text-slate-400 align-middle">${i + 1}</td>
+        <td class="px-2 py-1 text-slate-400 align-middle sticky left-0 bg-white dark:bg-slate-800 min-w-[2.5rem]">#</td>
         ${cols.map((c) => `<td class="px-1 py-1">
             <input data-key="${escapeHtml(c)}" data-i="${i}" value="${escapeHtml(row[c] != null ? row[c] : '')}"
-              class="w-full min-w-[7rem] px-2 py-1 rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs focus:border-primary focus:ring-1 focus:ring-primary/30" />
+              class="w-full min-w-[7rem] sm:min-w-[8rem] px-2 py-1.5 rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs min-h-[40px] focus:border-primary focus:ring-1 focus:ring-primary/30" />
           </td>`).join('')}
-        <td data-status="${i}" class="px-2 py-1 text-xs align-middle"></td>
-        <td class="px-1 py-1 align-middle">
-          <button type="button" data-del="${i}" title="${escapeHtml(t('import.removeRow'))}" class="p-1.5 rounded text-slate-400 hover:text-danger hover:bg-red-50 dark:hover:bg-red-900/20">
+        <td data-status="${i}" class="px-2 py-1 text-xs align-middle sticky right-0 bg-white dark:bg-slate-800 min-w-[8rem]"></td>
+        <td class="px-1 py-1 align-middle sticky right-[-4.5rem] bg-white dark:bg-slate-800">
+          <button type="button" data-del="${i}" title="${escapeHtml(t('import.removeRow'))}" class="p-2 rounded text-slate-400 hover:text-danger hover:bg-red-50 dark:hover:bg-red-900/20 min-h-[40px] min-w-[40px]">
             <i data-lucide="trash-2" class="w-4 h-4"></i>
           </button>
         </td>
@@ -260,7 +277,7 @@ export function openImportModal({ kind, templateColumns, onDone }) {
       </div>`;
   }
 
-  // Paint only the status column (keeps input focus intact while typing).
+  // Paint error cells red and the status column from validation results.
   function updateStatusCells(details) {
     const byLine = new Map((details || []).map((d) => [d.line, d]));
     for (let i = 0; i < parsedRows.length; i++) {
@@ -270,6 +287,24 @@ export function openImportModal({ kind, templateColumns, onDone }) {
       const det = byLine.get(i + 1) || {};
       const bad = det.status === 'invalid' || det.status === 'failed';
       const errText = det.errors ? Object.values(det.errors).join(', ') : (det.reason || '');
+
+      // Highlight individual cells that have errors.
+      if (det.errors) {
+        for (const [key, msg] of Object.entries(det.errors)) {
+          const input = root.querySelector(`input[data-key="${escapeHtml(key)}"][data-i="${i}"]`);
+          if (input) {
+            input.classList.add('border-danger', 'bg-red-50', 'focus:border-danger', 'focus:ring-danger/30');
+            input.title = msg;
+          }
+        }
+      } else {
+        // Clear error styles on valid rows.
+        root.querySelectorAll(`input[data-i="${i}"]`).forEach((inp) => {
+          inp.classList.remove('border-danger', 'bg-red-50', 'focus:border-danger', 'focus:ring-danger/30');
+          inp.title = '';
+        });
+      }
+
       cell.className = `px-2 py-1 text-xs align-middle ${bad ? 'text-danger font-medium' : 'text-success'}`;
       cell.textContent = bad ? errText : '✓';
       if (tr) tr.classList.toggle('bg-red-50', bad);

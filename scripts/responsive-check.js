@@ -13,7 +13,9 @@ const os = require('os');
 const path = require('path');
 
 const BASE_URL = process.argv[2] || 'http://localhost:4175';
-const PORT = 9334;
+// Port 0 lets Chrome pick a free port, so a leftover instance from a previous
+// run cannot make this one fail to start.
+const PORT = Number(process.env.RESP_CHECK_PORT) || 0;
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -132,9 +134,9 @@ const STUB = () => {
 
   const routes = [
     ['/api/settings', { success: true, data: { settings: {
-      schoolName: 'Green Hills Boarding School', currencySymbol: 'RF', finePerDay: 100,
+      schoolName: 'KAGEYO TSS Boarding School', currencySymbol: 'RF', finePerDay: 100,
       borrowingLimit: 3, loanDays: 14, teacherBorrowingLimit: 5, reservationHoldDays: 3,
-      phone: '+250788000000', email: 'library@greenhills.rw', address: 'Kigali' } } }],
+      phone: '+250788000000', email: 'library@kageyo.rw', address: 'Kigali' } } }],
     ['/api/auth/me', { success: true, data: { user: { _id: 'u1', fullName: 'Umutoni Jeannette', username: 'umutoni.jeannette', role: 'librarian' } } }],
     ['/api/dashboard', { success: true, data: {} }],
     ['/api/notifications/overdue', { success: true, data: { items, total: 1, totalBooks: 1, totalFines: 900 } }],
@@ -161,6 +163,7 @@ const STUB = () => {
 
 // Runs in the page: find anything that pushes the layout wider than the viewport.
 const OVERFLOW_PROBE = `
+  if (!document.documentElement || !document.body) return { vw: 0, docScrollW: 0, overflows: false, offenders: [], smallTargets: [], smallTargetCount: 0, hasHamburger: false, hasSidebar: false, notReady: true };
   const vw = document.documentElement.clientWidth;
   const describe = (el) => {
     let s = el.tagName.toLowerCase();
@@ -243,10 +246,23 @@ const check = (name, cond, extra) => {
     `--user-data-dir=${userDataDir}`,
     '--no-first-run', '--no-browser-check', '--disable-gpu',
     'about:blank'
-  ], { stdio: 'ignore' });
+  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+  // Chrome prints "DevTools listening on ws://127.0.0.1:<port>/..." on stderr.
+  // With --remote-debugging-port=0 the port is only known from there.
+  const realPort = await new Promise((resolve, reject) => {
+    let buf = '';
+    const timer = setTimeout(() => reject(new Error('Chrome never reported a DevTools port')), 30000);
+    chrome.stderr.on('data', (d) => {
+      buf += d.toString();
+      const m = buf.match(/DevTools listening on ws:\/\/127\.0\.0\.1:(\d+)\//);
+      if (m) { clearTimeout(timer); resolve(Number(m[1])); }
+    });
+    chrome.on('exit', (code) => { clearTimeout(timer); reject(new Error('Chrome exited early: ' + code)); });
+  });
 
   try {
-    const { webSocketDebuggerUrl } = await waitForHttp(`http://127.0.0.1:${PORT}/json/version`);
+    const { webSocketDebuggerUrl } = await waitForHttp(`http://127.0.0.1:${realPort}/json/version`);
     const ws = new WebSocket(webSocketDebuggerUrl);
     await new Promise((resolve, reject) => {
       ws.addEventListener('open', resolve, { once: true });
@@ -300,11 +316,15 @@ const check = (name, cond, extra) => {
       await sleep(400);
 
       for (const route of ROUTES) {
-        await cdp.eval(`location.hash = '${route}'; return 1;`);
+        await cdp.eval(`location.hash = '${route}'; return 1;`).catch(() => null);
         // Views fetch before they render, so let the stub resolve and paint.
         await sleep(700);
-        const r = await cdp.eval(OVERFLOW_PROBE);
+        const r = await cdp.eval(OVERFLOW_PROBE).catch(() => null);
         const label = `${device.name} ${route}`;
+        if (!r || r.notReady) {
+          check(`${label} no horizontal overflow`, false, { error: 'page was not ready to measure' });
+          continue;
+        }
         check(`${label} no horizontal overflow`, !r.overflows, {
           docScrollW: r.docScrollW, vw: r.vw, offenders: r.offenders
         });
@@ -324,9 +344,10 @@ const check = (name, cond, extra) => {
       width: 360, height: 740, deviceScaleFactor: 1, mobile: true
     });
     for (const route of ROUTES) {
-      await cdp.eval(`location.hash = '${route}'; return 1;`);
+      await cdp.eval(`location.hash = '${route}'; return 1;`).catch(() => null);
       await sleep(700);
-      const r = await cdp.eval(OVERFLOW_PROBE);
+      const r = await cdp.eval(OVERFLOW_PROBE).catch(() => null);
+      if (!r || r.notReady) { check(`360 ${route} tap targets are 44px or larger`, false, { error: 'page not ready' }); continue; }
       check(`360 ${route} tap targets are 44px or larger`, r.smallTargetCount === 0, r.smallTargets);
     }
 
@@ -384,37 +405,57 @@ const check = (name, cond, extra) => {
 
     // A collapsed desktop sidebar must not shrink the phone drawer.
     console.log('\n--- collapsed sidebar does not leak into the phone drawer ---');
-    const leak = await cdp.eval(`
-      const sleep = ms => new Promise(r => setTimeout(r, ms));
-      localStorage.setItem('lms.sidebarCollapsed', '1');
-      location.reload();
-      return 1;
-    `).catch(() => null);
-    if (leak !== null) {
-      await sleep(3000);
-      const r = await cdp.eval(`
-        const sleep = ms => new Promise(r => setTimeout(r, ms));
-        const btn = document.getElementById('menu-toggle');
-        if (!btn) return { ok: false };
-        btn.click();
-        await sleep(500);
-        const sb = document.getElementById('sidebar');
-        return { ok: true, width: Math.round(sb.getBoundingClientRect().width) };
-      `);
-      check('drawer stays full width when the desktop sidebar is collapsed', r.ok && r.width >= 200, r);
+    // Reload before setting the flag so the new document is not torn down
+    // mid-eval, and wait on the load event rather than a fixed sleep.
+    await cdp.eval(`localStorage.setItem('lms.sidebarCollapsed', '1'); return 1;`);
+    const loaded = new Promise((resolve) => {
+      const onMsg = (ev) => {
+        let m;
+        try { m = JSON.parse(ev.data); } catch { return; }
+        if (m.method === 'Page.loadEventFired' && m.sessionId === cdp.sessionId) {
+          ws.removeEventListener('message', onMsg);
+          resolve();
+        }
+      };
+      ws.addEventListener('message', onMsg);
+    });
+    // Drain in-flight evaluates before reloading: an evaluate whose execution
+    // context is destroyed by the navigation never gets a response, and its
+    // entry would sit in the pending map holding up the next command.
+    cdp.pending.clear();
+    await cdp.send('Page.reload', { ignoreCache: true });
+    await Promise.race([loaded, sleep(15000)]);
+    // The shell renders after the settings/auth requests resolve.
+    for (let i = 0; i < 40; i++) {
+      const up = await cdp.eval(`return Boolean(document.getElementById('menu-toggle'));`).catch(() => false);
+      if (up) break;
+      await sleep(250);
     }
+    const r = await cdp.eval(`
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const btn = document.getElementById('menu-toggle');
+      if (!btn) return { ok: false };
+      btn.click();
+      await sleep(500);
+      const sb = document.getElementById('sidebar');
+      const w = Math.round(sb.getBoundingClientRect().width);
+      const labelsHidden = Array.from(sb.querySelectorAll('.nav-label'))
+        .some(el => getComputedStyle(el).display === 'none');
+      return { ok: true, width: w, labelsHidden };
+    `);
+    check('drawer stays full width when the desktop sidebar is collapsed', r.ok && r.width >= 200, r);
+    check('drawer keeps its labels despite the desktop collapse', r.ok && r.labelsHidden === false, r);
+    await cdp.eval(`localStorage.removeItem('lms.sidebarCollapsed'); return 1;`).catch(() => null);
 
     // Landscape phone: content must reflow rather than overflow.
     console.log('\n--- rotation ---');
-    await cdp.eval(`localStorage.removeItem('lms.sidebarCollapsed'); location.hash = '#/dashboard'; return 1;`);
+    await cdp.eval(`location.hash = '#/dashboard'; return 1;`);
     await cdp.send('Emulation.setDeviceMetricsOverride', {
       width: 740, height: 360, deviceScaleFactor: 1, mobile: true
     });
     await sleep(600);
-    const rot = await cdp.eval(OVERFLOW_PROBE);
-    check('landscape phone reflows without overflow', !rot.overflows, {
-      docScrollW: rot.docScrollW, vw: rot.vw, offenders: rot.offenders
-    });
+    const rot = await cdp.eval(OVERFLOW_PROBE).catch(() => null);
+    check('landscape phone reflows without overflow', rot && !rot.notReady && !rot.overflows, rot || { error: 'page not ready' });
 
     // The about:blank bootstrap document has no localStorage, so the stub bails
     // out there by design. That is not an app failure.
