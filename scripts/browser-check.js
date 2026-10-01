@@ -106,9 +106,9 @@ const STUB = () => {
 
   const routes = [
     ['/api/settings', { success: true, data: { settings: {
-      schoolName: 'Green Hills Boarding School', currencySymbol: 'RF', finePerDay: 100,
+      schoolName: 'KAGEYO TSS Boarding School', currencySymbol: 'RF', finePerDay: 100,
       borrowingLimit: 3, loanDays: 14, teacherBorrowingLimit: 5, reservationHoldDays: 3,
-      phone: '+250788000000', email: 'library@greenhills.rw', address: 'Kigali' } } }],
+      phone: '+250788000000', email: 'library@kageyo.rw', address: 'Kigali' } } }],
     ['/api/auth/me', { success: true, data: { user: { _id: 'u1', fullName: 'Umutoni Jeannette', username: 'umutoni.jeannette', role: 'librarian' } } }],
     ['/api/transactions/overdue', { success: true, data: { total: 4 } }],
     ['/api/dashboard', { success: true, data: {} }],

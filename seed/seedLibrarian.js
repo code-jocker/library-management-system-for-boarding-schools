@@ -10,7 +10,7 @@ const LIBRARIAN = {
   username: 'umutoni.jeannette',
   fullName: 'Umutoni Jeannette',
   role: 'librarian',
-  email: 'umutoni.jeannette@greenhills.rw',
+  email: 'umutoni.jeannette@kageyo.rw',
   phone: '+250 788 000 000'
 };
 

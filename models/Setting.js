@@ -4,11 +4,11 @@ const mongoose = require('mongoose');
 
 const settingSchema = new mongoose.Schema(
   {
-    schoolName: { type: String, default: 'Green Hills Boarding School' },
+    schoolName: { type: String, default: 'KAGEYO TSS Boarding School' },
     motto: { type: String, default: 'Knowledge · Discipline · Service' },
     address: { type: String, default: 'P.O. Box 123, Kigali, Rwanda' },
     phone: { type: String, default: '+250 788 000 000' },
-    email: { type: String, default: 'library@greenhills.rw' },
+    email: { type: String, default: 'library@kageyo.rw' },
     logo: { type: String, default: '' }, // compressed base64 data URL
 
     academicYear: { type: String, default: '2024-2025' },

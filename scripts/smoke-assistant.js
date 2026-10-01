@@ -9,7 +9,7 @@ const Transaction = require('../models/Transaction');
 const Fine = require('../models/Fine');
 
 const settings = {
-  schoolName: 'Green Hills',
+  schoolName: 'KAGEYO TSS',
   currencySymbol: 'RF',
   finePerDay: 100,
   loanDays: 14,
@@ -17,7 +17,7 @@ const settings = {
   teacherBorrowingLimit: 5,
   reservationHoldDays: 3,
   phone: '+250 788 000 000',
-  email: 'library@greenhills.rw',
+  email: 'library@kageyo.rw',
   address: 'Kigali'
 };
 

@@ -11,11 +11,11 @@ const ActivityLog = require('../models/ActivityLog');
 const created = [];
 
 Setting.get = async () => ({
-  schoolName: 'Green Hills',
+  schoolName: 'KAGEYO TSS',
   currencySymbol: 'RF',
   finePerDay: 100,
   phone: '+250 788 000 000',
-  email: 'library@greenhills.rw'
+  email: 'library@kageyo.rw'
 });
 
 const member = {
@@ -25,7 +25,7 @@ const member = {
   classLevel: 'S3',
   dormitory: 'Kigali',
   phone: '0788123456',
-  email: 'alice@greenhills.rw',
+  email: 'alice@kageyo.rw',
   guardianName: 'Mr Mukamana',
   guardianPhone: '+250788999888',
   guardianEmail: 'guardian@example.com',
