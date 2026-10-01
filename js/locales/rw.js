@@ -177,7 +177,14 @@ export default {
     loanHistory: 'Amateka yo gutanga',
     availability: 'Ububonekere',
     copiesAvailable: '{n} kuri {t} bihari',
-    importBooks: 'Kwinjiza ibitabo'
+    importBooks: 'Kwinjiza ibitabo',
+    lookupIsbn: 'Shakisha',
+    lookingUp: 'Birashakishwa…',
+    lookupHint: 'Inyandemo ISBN, hanyuma uhiteme Shakisha kugira ngo wuzuze ibisobanuro ukoresheje Open Library.',
+    lookupFilled: 'Ibisobanuro byahemuwe muri Open Library — rebura byose.',
+    lookupEmpty: 'Inyandemo ISBN mbere yo gushakisha.',
+    lookupNoMatch: 'Nta makuru yabonetse kuri uwo ISBN. Andika ibisobanuro byawe.',
+    lookupDuplicate: 'Hari mu(isanzwe): {title} ({available} kuri {total} bihari). Urashobora guhindika ko kugira no kereza kugera ariko.'
   },
   categories: {
     title: 'Ibyiciro',

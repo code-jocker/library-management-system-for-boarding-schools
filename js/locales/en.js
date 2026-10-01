@@ -176,7 +176,14 @@ export default {
     loanHistory: 'Loan history',
     availability: 'Availability',
     copiesAvailable: '{n} of {t} copies available',
-    importBooks: 'Import books'
+    importBooks: 'Import books',
+    lookupIsbn: 'Look up',
+    lookingUp: 'Looking up…',
+    lookupHint: 'Type an ISBN, then Look up to fill the details from Open Library.',
+    lookupFilled: 'Details fetched from Open Library — please check them.',
+    lookupEmpty: 'Enter an ISBN first.',
+    lookupNoMatch: 'No record found for that ISBN. Enter the details manually.',
+    lookupDuplicate: 'Already in the library: {title} ({available} of {total} copies available). You can still save this as a new edition.'
   },
   categories: {
     title: 'Categories',

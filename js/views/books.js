@@ -156,13 +156,30 @@ export async function mount(ctx) {
     const langs = Array.from(new Set([...(langRes.data.languages || []), 'English', 'French', 'Kinyarwanda']));
     let coverData = book ? book.cover || '' : '';
 
+    // The ISBN field gets a "Look up" button that fetches metadata from Open
+    // Library. Open Library is a third party and often wrong about editions,
+    // so this only ever fills fields the librarian has left blank.
+    const isbnField = f.text({
+      name: 'isbn',
+      label: t('books.isbn'),
+      value: book?.isbn || '',
+      required: true
+    }).replace(/(<input[^>]*\/>)/, `$1
+        <div class="mt-2 flex items-center gap-2">
+          <button type="button" id="isbn-lookup" class="${BTN.outline}">
+            <i data-lucide="search" class="w-4 h-4"></i>${escapeHtml(t('books.lookupIsbn'))}
+          </button>
+          <span id="isbn-lookup-msg" class="text-xs"></span>
+        </div>
+        <p class="mt-1 text-xs text-slate-400">${escapeHtml(t('books.lookupHint'))}</p>`);
+
     const modalId = openModal({
       title: isEdit ? t('books.editBook') : t('books.addBook'),
       size: 'lg',
       body: `<form id="book-form" class="grid sm:grid-cols-2 gap-4" novalidate>
         <div class="sm:col-span-2">${f.text({ name: 'title', label: t('books.bookTitle'), value: book?.title || '', required: true })}</div>
         ${f.text({ name: 'author', label: t('books.author'), value: book?.author || '', required: true })}
-        ${f.text({ name: 'isbn', label: t('books.isbn'), value: book?.isbn || '', required: true })}
+        ${isbnField}
         ${f.select({ name: 'category', label: t('books.category'), value: book?.category?._id || book?.category || '', options: catOptions })}
         ${f.select({ name: 'language', label: t('books.language'), value: book?.language || 'English', options: langs })}
         ${f.text({ name: 'publisher', label: t('books.publisher'), value: book?.publisher || '' })}
@@ -194,6 +211,78 @@ export async function mount(ctx) {
         coverData = await compressImage(file);
         root.querySelector('#cover-preview').innerHTML = `<img src="${escapeHtml(coverData)}" class="w-16 h-24 object-cover rounded border" />`;
       } catch (err) { toast(err.message, 'error'); }
+    });
+
+    // ---- ISBN lookup (Open Library) ----
+    const lookupBtn = root.querySelector('#isbn-lookup');
+    const lookupMsg = root.querySelector('#isbn-lookup-msg');
+    const isbnInput = root.querySelector('[name="isbn"]');
+
+    // Fill a field only while the librarian has not typed anything into it, so
+    // a lookup never silently destroys work already done.
+    function fillIfEmpty(name, value) {
+      if (value == null || value === '') return;
+      const el = form.querySelector(`[name="${name}"]`);
+      if (el && !el.value.trim()) el.value = value;
+    }
+
+    function setLookupMessage(text, tone) {
+      lookupMsg.textContent = text;
+      lookupMsg.className = 'text-xs ' + (
+        tone === 'error' ? 'text-danger' : tone === 'warn' ? 'text-warning' : 'text-success'
+      );
+    }
+
+    async function lookupIsbn() {
+      const code = isbnInput.value.trim();
+      if (!code) { setLookupMessage(t('books.lookupEmpty'), 'error'); return; }
+
+      lookupBtn.disabled = true;
+      setLookupMessage(t('books.lookingUp'), 'info');
+      try {
+        // A lookup miss is a normal outcome, so the API answers 200 with
+        // success:false rather than an error status. Check the flag.
+        const res = await api.get('/books/isbn-lookup?isbn=' + encodeURIComponent(code));
+        if (!res.success) { setLookupMessage(res.message, 'warn'); return; }
+
+        const b = res.data.book;
+        fillIfEmpty('title', b.title);
+        fillIfEmpty('author', b.author);
+        fillIfEmpty('publisher', b.publisher);
+        fillIfEmpty('year', b.year);
+        fillIfEmpty('edition', b.edition);
+        fillIfEmpty('description', b.description);
+        // Language is a <select>: only choose it if the option exists, and add
+        // it when Open Library returns a language the catalogue has not seen.
+        const langSel = form.querySelector('[name="language"]');
+        if (langSel && b.language && !langSel.value.trim()) {
+          if (![...langSel.options].some((o) => o.value === b.language)) {
+            langSel.appendChild(new Option(b.language, b.language));
+          }
+          langSel.value = b.language;
+        }
+
+        if (res.data.alreadyInLibrary) {
+          const dup = res.data.alreadyInLibrary;
+          setLookupMessage(t('books.lookupDuplicate', {
+            title: dup.title,
+            available: dup.availableCopies,
+            total: dup.totalCopies
+          }), 'warn');
+        } else {
+          setLookupMessage(t('books.lookupFilled'), 'success');
+        }
+      } catch (err) {
+        // A dropped connection must never block manual entry.
+        setLookupMessage(err.message, 'error');
+      } finally {
+        lookupBtn.disabled = false;
+      }
+    }
+
+    lookupBtn.addEventListener('click', lookupIsbn);
+    isbnInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); lookupIsbn(); }
     });
 
     async function submit() {
