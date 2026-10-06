@@ -345,6 +345,17 @@ async function handleMembers(req, res, commit) {
 
     if (!fullName) errors.fullName = 'Required';
     
+    // Member type is required: student or teacher
+    const rawMemberType = (r.memberType || r['member type'] || r.type || '').toString().trim().toLowerCase();
+    const memberType = rawMemberType === 'teacher' ? 'teacher' : (rawMemberType === 'student' ? 'student' : '');
+    if (!memberType) errors.memberType = 'Required (student or teacher)';
+
+    // Gender is required
+    const rawGender = (r.gender || r.sex || '').toString().trim();
+    const gender = normalizeGender(rawGender);
+    const hasValidGender = rawGender && ['Male', 'Female', 'Other'].includes(gender);
+    if (!hasValidGender) errors.gender = 'Required (Male, Female, or Other)';
+    
     let finalAdmissionNo = admissionNo;
     
     if (admissionNo) {
@@ -380,7 +391,9 @@ async function handleMembers(req, res, commit) {
     const stream = (r.stream || r.section || '').toString().trim();
     const dormitory = (r.dormitory || r.dorm || r.hostel || '').toString().trim();
 
-    if (classLevel && validClassLevels.size > 0 && !validClassLevels.has(classLevel.toLowerCase())) {
+    if (!classLevel) {
+      errors.classLevel = 'Required';
+    } else if (validClassLevels.size > 0 && !validClassLevels.has(classLevel.toLowerCase())) {
       errors.classLevel = `Not a valid class (${settings.classLevels.join(', ')})`;
     }
     if (stream && validStreams.size > 0 && !validStreams.has(stream.toLowerCase())) {
@@ -399,8 +412,8 @@ async function handleMembers(req, res, commit) {
       const doc = {
         fullName,
         admissionNo: finalAdmissionNo,
-        gender: normalizeGender(r.gender),
-        memberType: (r.memberType || r['member type'] || r.type || '').toString().toLowerCase() === 'teacher' ? 'teacher' : 'student',
+        gender: gender,
+        memberType: memberType,
         classLevel,
         stream,
         dormitory,
@@ -419,7 +432,12 @@ async function handleMembers(req, res, commit) {
         status: commit ? 'pending' : 'valid',
         admissionNo: finalAdmissionNo,
         name: fullName,
-        classLevel
+        classLevel,
+        memberType,
+        gender,
+        stream,
+        dormitory,
+        phone: (r.phone || r.telephone || r.mobile || '').toString().trim()
       });
     } else {
       results.details.push({ line: lineNo, status: 'invalid', admissionNo: finalAdmissionNo, errors });
@@ -668,8 +686,14 @@ async function validateSingleRow(entity, row, allRows, rowIndex) {
   } else if (entity === 'members') {
     const fullName = (row.fullName || '').toString().trim();
     const admissionNo = (row.admissionNo || '').toString().trim().toUpperCase();
+    const memberType = (row.memberType || '').toString().trim().toLowerCase();
+    const gender = (row.gender || '').toString().trim();
+    const classLevel = (row.classLevel || '').toString().trim();
     
     if (!fullName) errors.fullName = 'Required';
+    if (!memberType || !['student', 'teacher'].includes(memberType)) errors.memberType = 'Required (student or teacher)';
+    if (!gender || !['Male', 'Female', 'Other'].includes(gender)) errors.gender = 'Required (Male, Female, or Other)';
+    if (!classLevel) errors.classLevel = 'Required';
     
     if (admissionNo) {
       const existing = await Member.findOne({ admissionNo }).lean();
@@ -687,7 +711,6 @@ async function validateSingleRow(entity, row, allRows, rowIndex) {
     const validStreams = new Set((settings.streams || []).map(s => s.toLowerCase()));
     const validDormitories = new Set((settings.dormitories || []).map(d => d.toLowerCase()));
     
-    const classLevel = (row.classLevel || '').toString().trim();
     const stream = (row.stream || '').toString().trim();
     const dormitory = (row.dormitory || '').toString().trim();
     

@@ -10,35 +10,40 @@
   <div class="max-w-6xl mx-auto py-8 px-4">
     <header class="mb-8">
       <h1 class="text-3xl font-bold text-blue-800">Import Members</h1>
-      <p class="text-gray-600 mt-1">Upload Excel with <strong>Name</strong> and <strong>Class</strong> columns only</p>
+      <p class="text-gray-600 mt-1">Upload Excel with <strong>Name</strong>, <strong>Type</strong>, <strong>Gender</strong>, and <strong>Class</strong> columns</p>
     </header>
 
     <!-- Step 1: Upload -->
     <div class="bg-white rounded-lg shadow p-6 mb-6">
       <h2 class="text-xl font-semibold mb-4">Step 1: Upload Excel File</h2>
       <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="mb-4">
+      <p class="text-sm text-gray-500 mb-2">
+        <strong>Required columns:</strong> Name, Type (student/teacher), Gender (Male/Female/Other), Class
+      </p>
       <p class="text-sm text-gray-500 mb-4">
-        Excel format: columns "Name" and "Class" only. Admission numbers are auto-generated.
+        <strong>Optional columns:</strong> Admission No, Stream, Dormitory, Phone, Guardian Name, Guardian Phone
       </p>
       <button id="previewBtn" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
         Preview & Edit Rows
-      </button>
-      <button id="importBtn" class="ml-2 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700" style="display:none">
-        Import All
       </button>
     </div>
 
     <!-- Step 2: Preview & Edit -->
     <div id="previewSection" class="bg-white rounded-lg shadow p-6 mb-6" style="display:none">
       <h2 class="text-xl font-semibold mb-4">Step 2: Review & Edit Rows</h2>
-      <p class="text-sm text-gray-500 mb-4">Click any cell to edit. Add or remove rows below.</p>
+      <p class="text-sm text-gray-500 mb-4">Click any cell to edit. Required: Name, Type, Gender, Class.</p>
       <div class="overflow-x-auto">
         <table class="min-w-full border border-gray-300" id="previewTable">
           <thead>
             <tr class="bg-gray-50">
               <th class="border border-gray-300 px-3 py-2 text-left">#</th>
-              <th class="border border-gray-300 px-3 py-2 text-left">Name</th>
-              <th class="border border-gray-300 px-3 py-2 text-left">Class</th>
+              <th class="border border-gray-300 px-3 py-2 text-left">Name *</th>
+              <th class="border border-gray-300 px-3 py-2 text-left">Type *</th>
+              <th class="border border-gray-300 px-3 py-2 text-left">Gender *</th>
+              <th class="border border-gray-300 px-3 py-2 text-left">Class *</th>
+              <th class="border border-gray-300 px-3 py-2 text-left">Stream</th>
+              <th class="border border-gray-300 px-3 py-2 text-left">Dormitory</th>
+              <th class="border border-gray-300 px-3 py-2 text-left">Phone</th>
               <th class="border border-gray-300 px-3 py-2 text-left">Actions</th>
             </tr>
           </thead>
@@ -49,15 +54,17 @@
         <button id="addRowBtn" class="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600">+ Add Row</button>
         <button id="commitBtn" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Import Members</button>
       </div>
+      <div id="validationSummary" class="mt-4"></div>
     </div>
 
     <!-- Step 3: Results -->
     <div id="resultsSection" class="bg-white rounded-lg shadow p-6 mb-6" style="display:none">
-      <h2 class="text-xl font-semibold mb-4">Step 3: Imported Members</h2>
+      <h2 class="text-xl font-semibold mb-4">Step 3: Import Results</h2>
       <div id="resultsContent"></div>
       <div class="mt-4 flex gap-2">
         <button id="addAnotherBtn" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Add Another Record</button>
         <button id="editMemberBtn" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Edit Member</button>
+        <button id="newImportBtn" class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">New Import</button>
       </div>
     </div>
 
@@ -67,16 +74,77 @@
         <h3 class="text-lg font-semibold mb-4">Edit Member</h3>
         <input type="hidden" id="editMemberId">
         <div class="mb-3">
-          <label class="block text-sm font-medium text-gray-700">Name</label>
+          <label class="block text-sm font-medium text-gray-700">Full Name *</label>
           <input type="text" id="editName" class="mt-1 block w-full border border-gray-300 rounded px-2 py-1">
         </div>
         <div class="mb-3">
-          <label class="block text-sm font-medium text-gray-700">Class</label>
+          <label class="block text-sm font-medium text-gray-700">Type *</label>
+          <select id="editType" class="mt-1 block w-full border border-gray-300 rounded px-2 py-1">
+            <option value="student">Student</option>
+            <option value="teacher">Teacher</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700">Gender *</label>
+          <select id="editGender" class="mt-1 block w-full border border-gray-300 rounded px-2 py-1">
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700">Class *</label>
           <input type="text" id="editClass" class="mt-1 block w-full border border-gray-300 rounded px-2 py-1">
+        </div>
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700">Stream</label>
+          <input type="text" id="editStream" class="mt-1 block w-full border border-gray-300 rounded px-2 py-1">
+        </div>
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700">Dormitory</label>
+          <input type="text" id="editDormitory" class="mt-1 block w-full border border-gray-300 rounded px-2 py-1">
+        </div>
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700">Phone</label>
+          <input type="text" id="editPhone" class="mt-1 block w-full border border-gray-300 rounded px-2 py-1">
         </div>
         <div class="flex gap-2">
           <button id="saveMemberBtn" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Save</button>
           <button id="cancelEditBtn" class="bg-gray-400 text-white px-4 py-2 rounded hover:bg-gray-500">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Member Modal -->
+    <div id="addModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full" style="display:none">
+      <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <h3 class="text-lg font-semibold mb-4">Add Member</h3>
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700">Full Name *</label>
+          <input type="text" id="addName" class="mt-1 block w-full border border-gray-300 rounded px-2 py-1">
+        </div>
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700">Type *</label>
+          <select id="addType" class="mt-1 block w-full border border-gray-300 rounded px-2 py-1">
+            <option value="student">Student</option>
+            <option value="teacher">Teacher</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700">Gender *</label>
+          <select id="addGender" class="mt-1 block w-full border border-gray-300 rounded px-2 py-1">
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700">Class *</label>
+          <input type="text" id="addClass" class="mt-1 block w-full border border-gray-300 rounded px-2 py-1">
+        </div>
+        <div class="flex gap-2">
+          <button id="saveNewMemberBtn" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Save</button>
+          <button id="cancelAddBtn" class="bg-gray-400 text-white px-4 py-2 rounded hover:bg-gray-500">Cancel</button>
         </div>
       </div>
     </div>
@@ -92,7 +160,6 @@
     const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
 
     let previewRows = [];
-    let importedMembers = [];
 
     // Preview rows from file
     document.getElementById('previewBtn').addEventListener('click', async () => {
@@ -111,19 +178,41 @@
         const data = await res.json();
         if (!data.success) return alert(data.message || 'Preview failed');
 
+        // Build preview rows from details (valid rows include name/classLevel/memberType/gender)
         previewRows = data.data.details
           .filter(d => d.status === 'valid')
-          .map(d => ({ name: d.name || '', classLevel: d.classLevel || '' }));
+          .map(d => ({
+            name: d.name || '',
+            memberType: d.memberType || 'student',
+            gender: d.gender || 'Other',
+            classLevel: d.classLevel || '',
+            stream: d.stream || '',
+            dormitory: d.dormitory || '',
+            phone: d.phone || ''
+          }));
 
-        // If preview didn't return name/class in details, parse from summary
+        // If no valid rows returned, try parsing from raw details
         if (previewRows.length === 0) {
-          // Fallback: re-read via JSON preview with parsed rows
-          previewRows = [];
+          previewRows = data.data.details
+            .filter(d => d.status !== 'invalid')
+            .map(d => ({
+              name: d.name || d.fullName || '',
+              memberType: d.memberType || 'student',
+              gender: d.gender || 'Other',
+              classLevel: d.classLevel || '',
+              stream: '',
+              dormitory: '',
+              phone: ''
+            }));
+        }
+
+        if (previewRows.length === 0) {
+          return alert('No valid rows found. Check that your file has Name, Type, Gender, and Class columns.');
         }
 
         renderPreview();
         document.getElementById('previewSection').style.display = 'block';
-        document.getElementById('importBtn').style.display = 'inline-block';
+        document.getElementById('previewSection').scrollIntoView({ behavior: 'smooth' });
       } catch (e) {
         alert('Error: ' + e.message);
       }
@@ -136,8 +225,13 @@
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td class="border border-gray-300 px-3 py-1">${idx + 1}</td>
-          <td class="border border-gray-300 px-3 py-1" contenteditable="true" data-idx="${idx}" data-field="name">${row.name}</td>
-          <td class="border border-gray-300 px-3 py-1" contenteditable="true" data-idx="${idx}" data-field="classLevel">${row.classLevel}</td>
+          <td class="border border-gray-300 px-3 py-1" contenteditable="true" data-idx="${idx}" data-field="name">${escapeHtml(row.name)}</td>
+          <td class="border border-gray-300 px-3 py-1" contenteditable="true" data-idx="${idx}" data-field="memberType">${escapeHtml(row.memberType)}</td>
+          <td class="border border-gray-300 px-3 py-1" contenteditable="true" data-idx="${idx}" data-field="gender">${escapeHtml(row.gender)}</td>
+          <td class="border border-gray-300 px-3 py-1" contenteditable="true" data-idx="${idx}" data-field="classLevel">${escapeHtml(row.classLevel)}</td>
+          <td class="border border-gray-300 px-3 py-1" contenteditable="true" data-idx="${idx}" data-field="stream">${escapeHtml(row.stream)}</td>
+          <td class="border border-gray-300 px-3 py-1" contenteditable="true" data-idx="${idx}" data-field="dormitory">${escapeHtml(row.dormitory)}</td>
+          <td class="border border-gray-300 px-3 py-1" contenteditable="true" data-idx="${idx}" data-field="phone">${escapeHtml(row.phone)}</td>
           <td class="border border-gray-300 px-3 py-1 text-center">
             <button class="text-red-600 text-sm" onclick="removeRow(${idx})">Remove</button>
           </td>
@@ -151,8 +245,36 @@
           const idx = Number(e.target.dataset.idx);
           const field = e.target.dataset.field;
           previewRows[idx][field] = e.target.textContent.trim();
+          validatePreview();
         });
       });
+
+      validatePreview();
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
+
+    function validatePreview() {
+      const summary = document.getElementById('validationSummary');
+      let invalid = 0;
+      previewRows.forEach((row, idx) => {
+        if (!row.name.trim() || !row.memberType.trim() || !row.gender.trim() || !row.classLevel.trim()) {
+          invalid++;
+        }
+      });
+      if (invalid > 0) {
+        summary.innerHTML = `<div class="bg-yellow-50 border border-yellow-300 p-3 rounded text-yellow-800">
+          <strong>${invalid}</strong> row(s) missing required fields (Name, Type, Gender, Class). These will fail on import.
+        </div>`;
+      } else {
+        summary.innerHTML = `<div class="bg-green-50 border border-green-300 p-3 rounded text-green-800">
+          All <strong>${previewRows.length}</strong> rows are valid and ready to import.
+        </div>`;
+      }
     }
 
     function removeRow(idx) {
@@ -161,7 +283,7 @@
     }
 
     document.getElementById('addRowBtn').addEventListener('click', () => {
-      previewRows.push({ name: '', classLevel: '' });
+      previewRows.push({ name: '', memberType: 'student', gender: 'Male', classLevel: '', stream: '', dormitory: '', phone: '' });
       renderPreview();
     });
 
@@ -169,7 +291,15 @@
     document.getElementById('commitBtn').addEventListener('click', async () => {
       const rows = previewRows
         .filter(r => r.name.trim())
-        .map(r => ({ fullName: r.name, classLevel: r.classLevel }));
+        .map(r => ({
+          fullName: r.name,
+          memberType: r.memberType,
+          gender: r.gender,
+          classLevel: r.classLevel,
+          stream: r.stream,
+          dormitory: r.dormitory,
+          phone: r.phone
+        }));
 
       if (!rows.length) return alert('No rows to import');
 
@@ -182,14 +312,16 @@
         const data = await res.json();
         if (!data.success) return alert(data.message || 'Import failed');
 
-        importedMembers = data.data.details.filter(d => d.status === 'created');
-        showResults(data.data.summary);
+        const created = data.data.details.filter(d => d.status === 'created');
+        const failed = data.data.details.filter(d => d.status === 'failed' || d.status === 'invalid');
+
+        showResults(data.data.summary, created, failed);
       } catch (e) {
         alert('Error: ' + e.message);
       }
     });
 
-    function showResults(summary) {
+    function showResults(summary, created, failed) {
       document.getElementById('resultsSection').style.display = 'block';
       document.getElementById('resultsContent').innerHTML = `
         <div class="grid grid-cols-3 gap-4 mb-4">
@@ -197,46 +329,72 @@
           <div class="bg-red-50 p-3 rounded"><strong>${summary.invalid}</strong> failed</div>
           <div class="bg-blue-50 p-3 rounded"><strong>${summary.total}</strong> total</div>
         </div>
-        ${importedMembers.length ? `
-        <table class="min-w-full border border-gray-300">
+        ${created.length ? `
+        <h3 class="font-semibold mb-2">Imported Members</h3>
+        <table class="min-w-full border border-gray-300 mb-4">
           <thead><tr class="bg-gray-50">
             <th class="border border-gray-300 px-3 py-2">Admission No</th>
             <th class="border border-gray-300 px-3 py-2">Name</th>
+            <th class="border border-gray-300 px-3 py-2">Type</th>
+            <th class="border border-gray-300 px-3 py-2">Gender</th>
             <th class="border border-gray-300 px-3 py-2">Class</th>
           </tr></thead>
           <tbody>
-            ${importedMembers.map(m => `
+            ${created.map(m => `
               <tr>
                 <td class="border border-gray-300 px-3 py-1">${m.admissionNo || ''}</td>
-                <td class="border border-gray-300 px-3 py-1">${m.name || ''}</td>
+                <td class="border border-gray-300 px-3 py-1">${escapeHtml(m.name || '')}</td>
+                <td class="border border-gray-300 px-3 py-1">${m.memberType || ''}</td>
+                <td class="border border-gray-300 px-3 py-1">${m.gender || ''}</td>
                 <td class="border border-gray-300 px-3 py-1">${m.classLevel || ''}</td>
               </tr>
             `).join('')}
           </tbody>
         </table>` : ''}
+        ${failed.length ? `
+        <h3 class="font-semibold mb-2">Failed Rows</h3>
+        <div class="bg-red-50 p-3 rounded">
+          ${failed.map(f => `<div>Row ${f.line}: ${f.admissionNo || ''} - ${JSON.stringify(f.errors || f.reason || 'Failed')}</div>`).join('')}
+        </div>` : ''}
       `;
+      document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
     }
 
-    // Add another record (manual form)
+    // Add another record (modal form)
     document.getElementById('addAnotherBtn').addEventListener('click', () => {
-      const name = prompt('Member name:');
-      if (!name) return;
-      const classLevel = prompt('Class:') || '';
+      document.getElementById('addModal').style.display = 'block';
+    });
 
-      fetch(`${API}/members`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ fullName: name, classLevel })
-      })
-        .then(r => r.json())
-        .then(data => {
-          if (data.success) {
-            alert('Member added: ' + data.data.member.admissionNo);
-          } else {
-            alert('Error: ' + data.message);
-          }
-        })
-        .catch(e => alert('Error: ' + e.message));
+    document.getElementById('saveNewMemberBtn').addEventListener('click', async () => {
+      const fullName = document.getElementById('addName').value.trim();
+      const memberType = document.getElementById('addType').value;
+      const gender = document.getElementById('addGender').value;
+      const classLevel = document.getElementById('addClass').value.trim();
+
+      if (!fullName || !classLevel) return alert('Name and Class are required');
+
+      try {
+        const res = await fetch(`${API}/members`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ fullName, memberType, gender, classLevel })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('Member added: ' + data.data.member.admissionNo);
+          document.getElementById('addModal').style.display = 'none';
+          document.getElementById('addName').value = '';
+          document.getElementById('addClass').value = '';
+        } else {
+          alert('Error: ' + data.message);
+        }
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    });
+
+    document.getElementById('cancelAddBtn').addEventListener('click', () => {
+      document.getElementById('addModal').style.display = 'none';
     });
 
     // Edit member
@@ -251,7 +409,12 @@
           const m = data.data.member;
           document.getElementById('editMemberId').value = m._id;
           document.getElementById('editName').value = m.fullName || '';
+          document.getElementById('editType').value = m.memberType || 'student';
+          document.getElementById('editGender').value = m.gender || 'Other';
           document.getElementById('editClass').value = m.classLevel || '';
+          document.getElementById('editStream').value = m.stream || '';
+          document.getElementById('editDormitory').value = m.dormitory || '';
+          document.getElementById('editPhone').value = m.phone || '';
           document.getElementById('editModal').style.display = 'block';
         })
         .catch(e => alert('Error: ' + e.message));
@@ -259,14 +422,23 @@
 
     document.getElementById('saveMemberBtn').addEventListener('click', async () => {
       const id = document.getElementById('editMemberId').value;
-      const fullName = document.getElementById('editName').value;
-      const classLevel = document.getElementById('editClass').value;
+      const payload = {
+        fullName: document.getElementById('editName').value.trim(),
+        memberType: document.getElementById('editType').value,
+        gender: document.getElementById('editGender').value,
+        classLevel: document.getElementById('editClass').value.trim(),
+        stream: document.getElementById('editStream').value.trim(),
+        dormitory: document.getElementById('editDormitory').value.trim(),
+        phone: document.getElementById('editPhone').value.trim()
+      };
+
+      if (!payload.fullName || !payload.classLevel) return alert('Name and Class are required');
 
       try {
         const res = await fetch(`${API}/members/${id}`, {
           method: 'PUT',
           headers,
-          body: JSON.stringify({ fullName, classLevel })
+          body: JSON.stringify(payload)
         });
         const data = await res.json();
         if (data.success) {
@@ -284,9 +456,13 @@
       document.getElementById('editModal').style.display = 'none';
     });
 
-    // Direct import without preview
-    document.getElementById('importBtn').addEventListener('click', async () => {
-      document.getElementById('commitBtn').click();
+    // New import - reset the page
+    document.getElementById('newImportBtn').addEventListener('click', () => {
+      previewRows = [];
+      document.getElementById('previewSection').style.display = 'none';
+      document.getElementById('resultsSection').style.display = 'none';
+      document.getElementById('fileInput').value = '';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     });
   </script>
 </body>
