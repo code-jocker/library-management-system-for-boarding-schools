@@ -120,6 +120,11 @@ app.get('/setup', (req, res) => {
   res.sendFile(require('path').join(__dirname, 'public', 'setup', 'index.html'));
 });
 
+// Serve member import page (requires auth via API, page itself is static)
+app.get('/import', (req, res) => {
+  res.sendFile(require('path').join(__dirname, 'public', 'import', 'index.html'));
+});
+
 // Redirect root to setup if not configured
 app.get('/', async (req, res) => {
   try {

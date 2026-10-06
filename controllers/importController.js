@@ -409,12 +409,18 @@ async function handleMembers(req, res, commit) {
         guardianPhone: (r.guardianPhone || r['guardian phone'] || r['parent phone'] || '').toString().trim(),
         status: 'active'
       };
-      
+
       // Only add to bulk insert if commit mode
       if (commit) {
         validDocs.push(doc);
       }
-      results.details.push({ line: lineNo, status: commit ? 'pending' : 'valid', admissionNo: finalAdmissionNo });
+      results.details.push({
+        line: lineNo,
+        status: commit ? 'pending' : 'valid',
+        admissionNo: finalAdmissionNo,
+        name: fullName,
+        classLevel
+      });
     } else {
       results.details.push({ line: lineNo, status: 'invalid', admissionNo: finalAdmissionNo, errors });
     }
@@ -427,11 +433,11 @@ async function handleMembers(req, res, commit) {
       const bulkResult = await Member.insertMany(validDocs, { ordered: false, lean: true });
       results.created = bulkResult.length;
       
-      // Update details with actual created admission numbers
+      // Update details with actual created admission numbers and IDs
       bulkResult.forEach((doc, idx) => {
         const detailIdx = results.details.findIndex(d => d.status === 'pending' && d.admissionNo === doc.admissionNo);
         if (detailIdx !== -1) {
-          results.details[detailIdx] = { line: detailIdx + 1, status: 'created', admissionNo: doc.admissionNo };
+          results.details[detailIdx] = { line: detailIdx + 1, status: 'created', admissionNo: doc.admissionNo, memberId: doc._id };
         }
       });
       
